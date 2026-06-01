@@ -9,9 +9,11 @@ const logger = require('../utils/logger');
 const queries = require('../db/queries');
 const { parseUrl } = require('../services/parser');
 const { deriveZhihuMetadataFromText } = require('../services/parser/zhihu');
+const { deriveDouyinMetadataFromText } = require('../services/parser/douyin');
 const { classifyEntry } = require('../services/classifier');
 const { processBook } = require('../services/bookmaker');
 const { getEntryAnalysis, startEntryAnalysis } = require('../services/analyzer');
+const { getCoversDir } = require('../utils/paths');
 
 async function downloadCover(coverUrl, sourceUrl) {
     if (!coverUrl) return null;
@@ -24,7 +26,7 @@ async function downloadCover(coverUrl, sourceUrl) {
         const extMatch = coverUrl.match(/\.(jpg|jpeg|png|webp|gif)/i);
         const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
         const filename = crypto.createHash('md5').update(coverUrl).digest('hex') + '.' + ext;
-        const filepath = path.join(__dirname, '../../data/covers', filename);
+        const filepath = path.join(getCoversDir(), filename);
         
         const dir = path.dirname(filepath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -62,7 +64,7 @@ router.post('/', async (req, res) => {
     // Extract actual URL if user pasted text like "标题 - 知乎 https://www.zhihu.com/..."
     const urlMatch = url.match(/(https?:\/\/[^\s]+)/);
     if (urlMatch) {
-        url = urlMatch[1].replace(/[)）\]】>》]+$/, ''); // trim trailing brackets
+        url = urlMatch[1].replace(/[)）\]】>》。，、]+$/u, ''); // trim trailing brackets / punctuation
     } else if (!url.startsWith('http')) {
         url = 'https://' + url;
     }
@@ -80,6 +82,7 @@ router.post('/', async (req, res) => {
         const parsed = await parseUrl(url);
         const entryData = { ...parsed, url, note: note || null, tags: tags || [] };
         applyZhihuSharedMetadata(entryData, originalInput, url);
+        applyDouyinSharedMetadata(entryData, originalInput, url);
 
         // 2. Classify with LLM (or fallback)
         if (!manualCategory) {
@@ -130,6 +133,23 @@ function applyZhihuSharedMetadata(entryData, originalInput, url) {
     if (!entryData.author) entryData.author = shared.author || entryData.author;
     if (!entryData.description) entryData.description = shared.description || entryData.description;
     entryData.source_data = { ...(entryData.source_data || {}), ...(shared.source_data || {}) };
+}
+
+function applyDouyinSharedMetadata(entryData, originalInput, url) {
+    if (entryData.platform !== 'douyin') return;
+    const shared = deriveDouyinMetadataFromText(originalInput, url);
+    if (!shared) return;
+    if (!entryData.title || entryData.title === '抖音内容' || entryData.title === url) entryData.title = shared.title || entryData.title;
+    if (!entryData.author) entryData.author = shared.author || entryData.author;
+    if (!entryData.description) entryData.description = shared.description || entryData.description;
+    entryData.source_data = mergeDouyinSourceData(entryData.source_data, shared.source_data);
+}
+
+function mergeDouyinSourceData(parsed = {}, shared = {}) {
+    const contentType = parsed.content_type && parsed.content_type !== 'unknown'
+        ? parsed.content_type
+        : (shared.content_type || parsed.content_type || 'unknown');
+    return { ...parsed, ...shared, content_type: contentType };
 }
 
 // GET /api/entries/search - Search entries

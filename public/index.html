@@ -239,6 +239,7 @@ tailwind.config = {
                     <option value="">全部来源</option>
                     <option value="wechat">微信公众号</option>
                     <option value="xiaohongshu">小红书</option>
+                    <option value="douyin">抖音</option>
                     <option value="bilibili">Bilibili</option>
                     <option value="twitter">X</option>
                     <option value="youtube">YouTube</option>
@@ -348,6 +349,48 @@ tailwind.config = {
                     <div>
                         <label class="block font-label text-sm text-on-surface font-medium mb-2">Model Name</label>
                         <input id="cfgModel" placeholder="gpt-4o-mini" class="w-full bg-surface-container-low border-b border-outline-variant/20 focus:border-outline-variant/50 focus:bg-surface-container-lowest text-on-surface text-sm rounded-t-sm py-3 px-4 outline-none transition-colors" />
+                    </div>
+                </div>
+            </section>
+            <section class="space-y-6">
+                <h3 class="font-label text-xs uppercase tracking-widest text-on-surface-variant font-semibold mb-4 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[18px]">extension</span> 浏览器收录插件
+                </h3>
+                <div class="bg-surface-container-low p-6 rounded-lg text-sm space-y-5">
+                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div>
+                            <p class="font-label text-sm font-semibold text-on-surface">InfoMind Clipper</p>
+                            <p class="mt-2 text-xs leading-relaxed text-on-surface-variant">用于抖音、小红书、知乎、B站、YouTube 和网页文章。插件在你已登录的浏览器里读取当前页面内容，不读取、不保存 cookie。</p>
+                            <a href="/clipper-setup.html" target="_blank" class="mt-4 inline-flex items-center gap-2 rounded-full bg-primary text-on-primary px-4 py-2 font-label text-sm hover:bg-primary-container transition-colors">
+                                <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                                查看图文配置指南
+                            </a>
+                        </div>
+                        <span id="clipperStatus" class="text-xs text-on-surface-variant whitespace-nowrap">尚未检查</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4">
+                            <p class="font-label text-xs uppercase tracking-widest text-on-surface-variant mb-2">连接地址</p>
+                            <code id="clipperBaseUrl" class="block font-mono text-xs break-all text-on-surface">http://127.0.0.1:3456</code>
+                            <button id="copyClipperBaseUrlBtn" type="button" class="mt-3 text-primary hover:underline font-label">复制地址</button>
+                        </div>
+                        <div class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4">
+                            <p class="font-label text-xs uppercase tracking-widest text-on-surface-variant mb-2">一次性配对码</p>
+                            <code id="clipperPairingToken" class="block font-mono text-xs break-all text-on-surface">Loading...</code>
+                            <button id="copyClipperTokenBtn" type="button" class="mt-3 text-primary hover:underline font-label">复制配对码</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <a href="/clipper-setup.html#install" target="_blank" class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 hover:border-primary/40 transition-colors">
+                            <span class="material-symbols-outlined text-[20px] text-primary">language</span>
+                            <span class="block mt-2 font-label text-sm text-on-surface">Chrome / Edge / Arc</span>
+                            <span class="block mt-1 text-xs text-on-surface-variant">查看带图示的安装、配对和收录步骤。</span>
+                        </a>
+                        <a href="/clipper-setup.html#install" target="_blank" class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 hover:border-primary/40 transition-colors">
+                            <span class="material-symbols-outlined text-[20px] text-primary">desktop_mac</span>
+                            <span class="block mt-2 font-label text-sm text-on-surface">Safari</span>
+                            <span class="block mt-1 text-xs text-on-surface-variant">查看 Safari 当前状态和后续签名分发说明。</span>
+                        </a>
                     </div>
                 </div>
             </section>

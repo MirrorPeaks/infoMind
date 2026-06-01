@@ -6,13 +6,14 @@ const logger = require('../utils/logger');
 const queries = require('../db/queries');
 const { parseUrl } = require('../services/parser');
 const { deriveZhihuMetadataFromText } = require('../services/parser/zhihu');
+const { deriveDouyinMetadataFromText } = require('../services/parser/douyin');
 const { classifyEntry } = require('../services/classifier');
 const { processBook } = require('../services/bookmaker');
 
 // Extract URLs from a text string
 function extractUrls(text) {
     const urlRegex = /https?:\/\/[^\s"'<>]+/gi;
-    return [...new Set((text.match(urlRegex) || []))];
+    return [...new Set((text.match(urlRegex) || []).map(sanitizeSharedUrl))];
 }
 
 // Verify OpenClaw HMAC signature (optional, if secret is configured)
@@ -36,7 +37,7 @@ router.post('/openclaw', async (req, res) => {
     }
 
     const { message, urls: providedUrls } = req.body;
-    const urls = providedUrls?.length ? providedUrls : extractUrls(message || '');
+    const urls = providedUrls?.length ? providedUrls.map(sanitizeSharedUrl) : extractUrls(message || '');
 
     if (!urls.length) {
         return res.json({ success: true, message: 'No URLs found in message', processed: 0 });
@@ -57,6 +58,7 @@ router.post('/openclaw', async (req, res) => {
             const parsed = await parseUrl(url);
             const entryData = { ...parsed, url };
             applyZhihuSharedMetadata(entryData, message || '', url);
+            applyDouyinSharedMetadata(entryData, message || '', url);
 
             try {
                 const classification = await classifyEntry(entryData);
@@ -98,6 +100,27 @@ function applyZhihuSharedMetadata(entryData, originalInput, url) {
     if (!entryData.author) entryData.author = shared.author || entryData.author;
     if (!entryData.description) entryData.description = shared.description || entryData.description;
     entryData.source_data = { ...(entryData.source_data || {}), ...(shared.source_data || {}) };
+}
+
+function applyDouyinSharedMetadata(entryData, originalInput, url) {
+    if (entryData.platform !== 'douyin') return;
+    const shared = deriveDouyinMetadataFromText(originalInput, url);
+    if (!shared) return;
+    if (!entryData.title || entryData.title === '抖音内容' || entryData.title === url) entryData.title = shared.title || entryData.title;
+    if (!entryData.author) entryData.author = shared.author || entryData.author;
+    if (!entryData.description) entryData.description = shared.description || entryData.description;
+    entryData.source_data = mergeDouyinSourceData(entryData.source_data, shared.source_data);
+}
+
+function sanitizeSharedUrl(url) {
+    return String(url || '').replace(/[)）\]】>》。，、]+$/u, '');
+}
+
+function mergeDouyinSourceData(parsed = {}, shared = {}) {
+    const contentType = parsed.content_type && parsed.content_type !== 'unknown'
+        ? parsed.content_type
+        : (shared.content_type || parsed.content_type || 'unknown');
+    return { ...parsed, ...shared, content_type: contentType };
 }
 
 module.exports = router;

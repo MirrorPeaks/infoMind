@@ -3,7 +3,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const METADATA_ONLY_PLATFORMS = new Set(['bilibili', 'youtube', 'twitter', 'xiaohongshu']);
+const METADATA_ONLY_PLATFORMS = new Set(['bilibili', 'youtube', 'twitter', 'xiaohongshu', 'douyin']);
 
 async function extractEntryContent(entry, { allowNetwork = true } = {}) {
     const stored = collectStoredText(entry);
@@ -56,6 +56,7 @@ function collectStoredText(entry) {
         source.transcriptText,
         source.transcript_raw,
         source.zhihu_shared_text,
+        source.douyin_shared_text,
         source.description,
         source.rawDescription,
         source.seriesName,
@@ -124,7 +125,10 @@ function buildInsufficientReason(entry) {
         return '播客内容需要节目文稿或音频转录。当前只有元数据，建议由 Hermes 抓取或转写后回写。';
     }
     if (entry.platform === 'xiaohongshu') {
-        return '小红书页面正文受动态渲染和访问策略影响，当前正文不足，建议由 Hermes 使用浏览器能力抓取后回写。';
+        return '小红书页面正文受动态渲染和访问策略影响，当前正文不足。请在已登录浏览器里用 InfoMind Clipper 重新收录当前页面。';
+    }
+    if (entry.platform === 'douyin') {
+        return '抖音内容通常需要字幕、视频转录、图文正文或 OCR。请在已登录浏览器里用 InfoMind Clipper 重新收录；视频无字幕时可再进入本地转写或 Agent 增强流程。';
     }
     return '当前链接正文不足，无法生成可信的内容解读导图。';
 }

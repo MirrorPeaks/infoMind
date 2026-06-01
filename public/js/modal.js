@@ -5,9 +5,10 @@ let bookModalAnalysisSeq = 0;
 const analysisDockJobs = new Map();
 let analysisDockTimer = null;
 
-function openBookModal(bookId) {
+function openBookModal(bookId, options = {}) {
     const overlay = document.getElementById('modalOverlay');
     const content = document.getElementById('modalContent');
+    const fallbackEntry = options?.fallbackEntry || null;
 
     _openOverlay(overlay);
     content.innerHTML = '<div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined animate-spin text-4xl text-primary">autorenew</span></div>';
@@ -116,7 +117,21 @@ function openBookModal(bookId) {
         bindBookDeleteButton(book);
         updateBookModalAnalysis(initialEntry, book);
     }).catch(err => {
-        content.innerHTML = `<div style="padding:40px;text-align:center;color:#ba1a1a">加载失败: ${escapeHtml(err.message)}</div>`;
+        if (fallbackEntry?.id) {
+            content.innerHTML = buildBrokenEntryRecoveryState(fallbackEntry, err);
+            return;
+        }
+        content.innerHTML = `
+            <div class="w-full h-full bg-surface p-10 flex items-start justify-center">
+                <div class="max-w-lg rounded-3xl border border-error/20 bg-error-container/10 p-8 text-left">
+                    <div class="w-11 h-11 rounded-full bg-error-container text-error flex items-center justify-center mb-5">
+                        <span class="material-symbols-outlined">error</span>
+                    </div>
+                    <h3 class="font-headline text-3xl text-on-surface mb-3">加载失败</h3>
+                    <p class="font-body text-on-surface-variant">${escapeHtml(err.message || 'Book not found')}</p>
+                    <button type="button" onclick="closeModal()" class="mt-6 rounded-lg bg-primary text-on-primary px-5 py-3 font-body text-sm">关闭</button>
+                </div>
+            </div>`;
     });
 }
 
@@ -187,7 +202,7 @@ function buildAnalysisEmptyState(entry) {
 
 function buildAnalysisNeedsContentState(analysis, entry) {
     const result = analysis?.result || {};
-    const isVideo = ['bilibili', 'youtube'].includes(entry?.platform);
+    const isVideo = isEntryVideoLike(entry);
     const setupCommand = result.setup_command || (result.setup_action === 'install_local_stt' ? 'npm run setup:stt' : '');
     return `
         <div class="min-h-[360px] rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-8">
@@ -216,13 +231,30 @@ function buildAnalysisNeedsContentState(analysis, entry) {
                 <code class="block px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/20 font-mono text-sm text-on-surface break-all">${escapeHtml(setupCommand)}</code>
             </div>` : ''}
             <div class="mt-8 rounded-2xl bg-surface-container-low p-5 border border-outline-variant/20">
-                <div class="font-label text-xs uppercase tracking-[0.16em] text-on-surface-variant mb-2">Hermes 建议</div>
+                <div class="font-label text-xs uppercase tracking-[0.16em] text-on-surface-variant mb-2">浏览器插件建议</div>
                 <p class="font-body text-sm leading-relaxed text-on-surface-variant">
-                    让 Hermes 使用浏览器/转录/OCR 能力抓取完整内容，然后回写到 <code class="px-1 rounded bg-surface">PUT /api/entries/${escapeHtml(entry?.id || ':id')}/content</code>，之后再重新生成解读。
+                    对抖音、小红书、知乎等登录内容，优先在已登录浏览器里使用 InfoMind Clipper 重新收录当前页面。插件会读取页面可见正文、图片、字幕或描述，不需要配置 cookie。
+                </p>
+                <p class="font-body text-xs leading-relaxed text-on-surface-variant/80 mt-3">
+                    高级用户也可以让 Hermes/OpenClaw 做 OCR、转写或批处理，然后回写到 <code class="px-1 rounded bg-surface">PUT /api/entries/${escapeHtml(entry?.id || ':id')}/content</code>。
                 </p>
             </div>
         </div>
     `;
+}
+
+function isEntryVideoLike(entry) {
+    if (!entry) return false;
+    if (['bilibili', 'youtube'].includes(entry.platform)) return true;
+    if (entry.platform !== 'douyin') return false;
+    const source = entry.source_data || {};
+    const type = String(source.content_type || '').toLowerCase();
+    if (['note', 'image', 'images', 'photo', 'photos'].includes(type)) return false;
+    if (['video', 'aweme_video'].includes(type)) return true;
+    if (source.video_url || source.videoUrl || source.play_addr || source.playAddr) return true;
+    const url = `${entry.url || ''} ${source.final_url || ''}`.toLowerCase();
+    if (url.includes('/note/')) return false;
+    return url.includes('/video/');
 }
 
 function buildAnalysisFailedState(analysis, entry) {
@@ -618,6 +650,52 @@ function confirmDeleteEntry(entryId) {
             window.loadData();
         }),
     });
+}
+
+function buildBrokenEntryRecoveryState(entry, err) {
+    const title = entry.title || entry.url || '无标题';
+    const reason = err?.message || 'Book not found';
+    const platformLabel = getModalPlatformLabel(entry.platform);
+    return `
+        <div class="w-full h-full bg-surface p-8 md:p-12 overflow-y-auto">
+            <button onclick="closeModal()" class="absolute top-6 right-6 p-2 rounded-full text-on-surface-variant hover:bg-surface-container-highest transition-colors">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+            <div class="max-w-2xl">
+                <div class="w-12 h-12 rounded-full bg-error-container text-error flex items-center justify-center mb-6">
+                    <span class="material-symbols-outlined">database_off</span>
+                </div>
+                <h2 class="font-headline text-4xl text-on-surface leading-tight mb-4">这条收录数据可能已损坏</h2>
+                <p class="font-body text-on-surface-variant leading-relaxed mb-8">
+                    当前条目指向的书籍不存在，所以无法打开完整详情。你可以打开原链接确认，也可以直接删除这条坏数据。
+                </p>
+                <div class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 mb-8">
+                    <div class="font-label text-xs uppercase tracking-[0.16em] text-on-surface-variant mb-3">Broken Entry</div>
+                    <h3 class="font-headline text-2xl text-on-surface mb-3 break-words">${escapeHtml(title)}</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label text-xs">${escapeHtml(platformLabel)}</span>
+                        ${entry.category ? `<span class="inline-flex items-center px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label text-xs">${escapeHtml(entry.category)}</span>` : ''}
+                    </div>
+                    <p class="font-body text-sm text-on-surface-variant break-all">${escapeHtml(entry.url || '')}</p>
+                    <p class="font-body text-xs text-error mt-4">错误：${escapeHtml(reason)}</p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    ${entry.url ? `<a href="${escapeHtml(entry.url)}" target="_blank" class="inline-flex items-center gap-2 rounded-lg bg-primary text-on-primary px-5 py-3 font-body font-medium">
+                        <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                        打开原链接
+                    </a>` : ''}
+                    <button type="button" onclick="confirmDeleteEntry('${escapeHtml(entry.id)}')" class="inline-flex items-center gap-2 rounded-lg bg-error text-on-error px-5 py-3 font-body font-medium">
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                        删除这条收录
+                    </button>
+                    <button type="button" onclick="window.openEntryModal(JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(entry))}')))" class="inline-flex items-center gap-2 rounded-lg bg-surface-container-high text-on-surface px-5 py-3 font-body font-medium">
+                        <span class="material-symbols-outlined text-[18px]">article</span>
+                        查看条目详情
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function confirmDeleteEntryFromBook(entry, book) {

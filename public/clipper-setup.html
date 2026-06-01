@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>InfoMind Clipper 配置指南</title>
+    <style>
+        :root {
+            --bg: #f5f5f7;
+            --card: #ffffff;
+            --ink: #1d1d1f;
+            --muted: #6e6e73;
+            --line: rgba(0, 0, 0, 0.1);
+            --blue: #0066cc;
+            --blue-hover: #0071e3;
+            --green: #1d7f4c;
+            --red: #d93f3f;
+            --shadow: 0 22px 60px rgba(0, 0, 0, 0.08);
+            --radius: 24px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 12% 8%, rgba(0, 102, 204, 0.08), transparent 28%),
+                radial-gradient(circle at 86% 16%, rgba(29, 127, 76, 0.08), transparent 26%),
+                var(--bg);
+            color: var(--ink);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        }
+
+        a { color: inherit; }
+
+        .page {
+            max-width: 1160px;
+            margin: 0 auto;
+            padding: 28px 20px 72px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-mark {
+            width: 32px;
+            height: 32px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            background: #000;
+            color: #fff;
+            font-size: 13px;
+        }
+
+        .ghost-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 16px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
+            gap: 42px;
+            align-items: center;
+            margin-bottom: 44px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 34px;
+            padding: 0 12px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.76);
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            margin: 0;
+            max-width: 760px;
+            font-size: clamp(42px, 7vw, 78px);
+            line-height: 0.96;
+            letter-spacing: -0.065em;
+        }
+
+        .lead {
+            max-width: 650px;
+            margin: 22px 0 0;
+            color: var(--muted);
+            font-size: clamp(17px, 2vw, 21px);
+            line-height: 1.55;
+            letter-spacing: -0.012em;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 999px;
+            min-height: 46px;
+            padding: 0 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font: inherit;
+            font-size: 15px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 180ms ease, transform 180ms ease;
+        }
+
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary { background: var(--blue); color: #fff; }
+        .btn-primary:hover { background: var(--blue-hover); }
+        .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+
+        .device {
+            position: relative;
+            min-height: 390px;
+            display: grid;
+            place-items: center;
+        }
+
+        .hero-browser-art {
+            display: block;
+            width: min(100%, 520px);
+            height: auto;
+            filter: drop-shadow(0 24px 48px rgba(0, 0, 0, 0.12));
+        }
+
+        .status-card {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin: 20px 0 50px;
+        }
+
+        .token-card {
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.78);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.045);
+        }
+
+        .token-card small {
+            display: block;
+            color: var(--muted);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        code.value {
+            display: block;
+            min-height: 44px;
+            border-radius: 14px;
+            padding: 13px 14px;
+            background: #fff;
+            border: 1px solid var(--line);
+            color: var(--ink);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        .copy-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .copy-row span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .mini-btn {
+            border: 0;
+            border-radius: 999px;
+            background: #f1f1f4;
+            color: var(--ink);
+            min-height: 34px;
+            padding: 0 12px;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 18px;
+            margin: 54px 0 20px;
+        }
+
+        .section-title h2 {
+            margin: 0;
+            font-size: clamp(28px, 4vw, 44px);
+            line-height: 1;
+            letter-spacing: -0.05em;
+        }
+
+        .section-title p {
+            max-width: 460px;
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .browser-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .browser-card {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.84);
+            padding: 18px;
+            min-height: 176px;
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.04);
+        }
+
+        .browser-logo {
+            width: 48px;
+            height: 48px;
+            display: block;
+            margin-bottom: 18px;
+        }
+
+        .browser-card h3 {
+            margin: 0 0 8px;
+            font-size: 18px;
+            letter-spacing: -0.02em;
+        }
+
+        .browser-card p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .step {
+            position: relative;
+            min-height: 310px;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: #fff;
+            padding: 20px;
+            overflow: hidden;
+            box-shadow: 0 16px 44px rgba(0, 0, 0, 0.05);
+        }
+
+        .step-no {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: #000;
+            color: #fff;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .step h3 {
+            margin: 0 0 10px;
+            font-size: 21px;
+            letter-spacing: -0.03em;
+        }
+
+        .step p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 15px;
+        }
+
+        .illustration {
+            position: absolute;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            height: 112px;
+            border-radius: 20px;
+            background: #f5f5f7;
+            border: 1px solid var(--line);
+            overflow: hidden;
+        }
+
+        .step-image {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+        }
+
+        .workflow {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .flow-item {
+            border-radius: 22px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.78);
+            padding: 18px;
+            min-height: 138px;
+        }
+
+        .flow-item strong {
+            display: block;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+
+        .flow-item span {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .notice {
+            margin-top: 22px;
+            border-radius: 24px;
+            background: #fff7df;
+            border: 1px solid rgba(187, 137, 0, 0.18);
+            padding: 18px 20px;
+            color: #6f5514;
+            line-height: 1.55;
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 22px;
+            transform: translateX(-50%) translateY(16px);
+            opacity: 0;
+            pointer-events: none;
+            padding: 12px 16px;
+            border-radius: 999px;
+            background: #161617;
+            color: #fff;
+            transition: opacity 180ms ease, transform 180ms ease;
+            font-size: 14px;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 920px) {
+            .hero,
+            .status-card,
+            .steps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .browser-grid,
+            .workflow {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .device {
+                min-height: 340px;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .page { padding-inline: 16px; }
+            .topbar { margin-bottom: 32px; }
+            .hero { gap: 24px; }
+            .browser-grid,
+            .workflow {
+                grid-template-columns: 1fr;
+            }
+            .section-title {
+                display: block;
+            }
+            .section-title p {
+                margin-top: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <nav class="topbar">
+            <div class="brand"><span class="brand-mark">IM</span> InfoMind Clipper</div>
+            <a class="ghost-link" href="/">返回 InfoMind</a>
+        </nav>
+
+        <section class="hero">
+            <div>
+                <div class="eyebrow">浏览器内收录，不需要 Cookie 配置</div>
+                <h1>把正在看的内容，直接投进 InfoMind。</h1>
+                <p class="lead">InfoMind Clipper 在你已经登录的浏览器里读取当前页面内容。抖音、小红书、知乎、B站、YouTube 和普通网页都可以用同一套方式收录。</p>
+                <div class="hero-actions">
+                    <a class="btn btn-primary" href="#install">查看安装步骤</a>
+                    <a class="btn btn-secondary" href="#pair">复制配对信息</a>
+                </div>
+            </div>
+            <div class="device">
+                <img class="hero-browser-art" src="/assets/clipper/mock-hero-browser.svg" alt="浏览器页面中打开 InfoMind Clipper 的示意图">
+            </div>
+        </section>
+
+        <section id="pair" class="status-card">
+            <div class="token-card">
+                <small>InfoMind 连接地址</small>
+                <code id="baseUrl" class="value">http://127.0.0.1:3456</code>
+                <div class="copy-row">
+                    <span>填入插件的 InfoMind 地址</span>
+                    <button class="mini-btn" type="button" data-copy="baseUrl">复制</button>
+                </div>
+            </div>
+            <div class="token-card">
+                <small>一次性配对码</small>
+                <code id="pairingToken" class="value">正在读取...</code>
+                <div class="copy-row">
+                    <span id="pairingHint">从本机 InfoMind 自动生成</span>
+                    <button class="mini-btn" type="button" data-copy="pairingToken">复制</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="install">
+            <div class="section-title">
+                <h2>选择你的浏览器</h2>
+                <p>Chrome、Edge 和 Arc 使用同一套 Chromium 插件。Safari 会复用同一套采集核心，但正式分发需要 Apple 签名。</p>
+            </div>
+            <div class="browser-grid">
+                <article class="browser-card">
+                    <img class="browser-logo" src="/assets/clipper/logo-chrome.svg" alt="Chrome 图标">
+                    <h3>Chrome</h3>
+                    <p>打开扩展程序页面，加载 `extensions/web-extension` 文件夹即可测试。</p>
+                </article>
+                <article class="browser-card">
+                    <img class="browser-logo" src="/assets/clipper/logo-edge.svg" alt="Edge 图标">
+                    <h3>Edge</h3>
+                    <p>进入扩展页面，开启开发者模式，加载同一个插件目录。</p>
+                </article>
+                <article class="browser-card">
+                    <img class="browser-logo" src="/assets/clipper/logo-arc.svg" alt="Arc 图标">
+                    <h3>Arc</h3>
+                    <p>兼容 Chrome 扩展，安装方式与 Chrome 基本一致。</p>
+                </article>
+                <article class="browser-card">
+                    <img class="browser-logo" src="/assets/clipper/logo-safari.svg" alt="Safari 图标">
+                    <h3>Safari</h3>
+                    <p>需要 Safari Web Extension Host App。当前页面先作为配置和说明入口。</p>
+                </article>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-title">
+                <h2>三步完成配置</h2>
+                <p>开发预览版需要手动加载插件；正式发布后这里会替换为商店安装按钮。</p>
+            </div>
+            <div class="steps-grid">
+                <article class="step">
+                    <div class="step-no">1</div>
+                    <h3>加载插件目录</h3>
+                    <p>Chrome / Edge / Arc 打开扩展程序页面，开启开发者模式，选择 `extensions/web-extension`。</p>
+                    <div class="illustration">
+                        <img class="step-image" src="/assets/clipper/mock-install.svg" alt="浏览器扩展程序页面开启开发者模式并加载插件目录">
+                    </div>
+                </article>
+                <article class="step">
+                    <div class="step-no">2</div>
+                    <h3>填入连接信息</h3>
+                    <p>点击浏览器工具栏里的 InfoMind Clipper，把本页的连接地址和配对码填进去。</p>
+                    <div class="illustration">
+                        <img class="step-image" src="/assets/clipper/mock-pair.svg" alt="InfoMind Clipper 弹窗中填写连接地址和配对码">
+                    </div>
+                </article>
+                <article class="step">
+                    <div class="step-no">3</div>
+                    <h3>保存当前页面</h3>
+                    <p>打开抖音、小红书、知乎或任意文章页，点击 Save to InfoMind，内容会进入书架和时间线。</p>
+                    <div class="illustration">
+                        <img class="step-image" src="/assets/clipper/mock-save.svg" alt="浏览器页面保存到 InfoMind 成功">
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-title">
+                <h2>它会收集什么</h2>
+                <p>插件只在你点击保存时读取当前页面。InfoMind 不读取、不保存平台 Cookie。</p>
+            </div>
+            <div class="workflow">
+                <div class="flow-item"><strong>标题与作者</strong><span>用于生成书架卡片、时间线和作者聚合。</span></div>
+                <div class="flow-item"><strong>正文与描述</strong><span>用于更准确分类，并生成 Article Mind Map。</span></div>
+                <div class="flow-item"><strong>图片与封面</strong><span>用于书籍封面和详情页视觉呈现。</span></div>
+                <div class="flow-item"><strong>字幕与视频信息</strong><span>有字幕时直接用于解读；无字幕时再进入转写流程。</span></div>
+            </div>
+            <div class="notice">
+                Safari 用户：当前普通用户最顺畅的路径仍是 Chrome / Edge / Arc。Safari 版需要后续签名包装后才能像普通 App 一样安装。
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast">已复制</div>
+
+    <script>
+        const toast = document.getElementById('toast');
+
+        loadPairing();
+        document.querySelectorAll('[data-copy]').forEach(button => {
+            button.addEventListener('click', () => copyValue(button.dataset.copy));
+        });
+
+        async function loadPairing() {
+            const baseUrl = document.getElementById('baseUrl');
+            const pairingToken = document.getElementById('pairingToken');
+            const pairingHint = document.getElementById('pairingHint');
+            try {
+                const res = await fetch('/api/clipper/pairing');
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || '读取失败');
+                baseUrl.textContent = json.data.base_url || window.location.origin;
+                pairingToken.textContent = json.data.token || '';
+                pairingHint.textContent = '复制到浏览器插件即可完成配对';
+            } catch (err) {
+                baseUrl.textContent = window.location.origin;
+                pairingToken.textContent = '无法读取配对码';
+                pairingHint.textContent = err.message || '请确认 InfoMind 正在运行';
+            }
+        }
+
+        async function copyValue(id) {
+            const value = document.getElementById(id)?.textContent?.trim();
+            if (!value || value === '正在读取...' || value === '无法读取配对码') return;
+            await navigator.clipboard.writeText(value);
+            showToast();
+        }
+
+        function showToast() {
+            toast.classList.add('show');
+            clearTimeout(showToast.timer);
+            showToast.timer = setTimeout(() => toast.classList.remove('show'), 1300);
+        }
+    </script>
+</body>
+</html>

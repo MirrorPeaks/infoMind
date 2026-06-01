@@ -7,7 +7,7 @@ InfoMind 是一个个人知识管理系统，用来把分散在网页、视频�
 ## 功能概览
 
 - **链接收录**：支持通过 Web UI、CLI、OpenClaw/Hermes Skill 和 Webhook 保存链接。
-- **多平台解析**：内置 Bilibili、YouTube、Twitter/X、小红书、知乎、小宇宙和通用网页解析器。
+- **多平台解析**：内置 Bilibili、YouTube、Twitter/X、抖音、小红书、知乎、小宇宙和通用网页解析器。
 - **封面缓存**：解析封面图并下载到本地 `data/covers/`，降低远程图片失效和防盗链影响。
 - **AI 分类**：接入 OpenAI-compatible LLM 进行 25 个一级知识分类；LLM 不可用时使用关键词兜底。
 - **真实内容解读**：支持后台生成文章思维导图；视频优先使用字幕，无字幕时可用本地 whisper.cpp 转写后再分析。
@@ -16,13 +16,14 @@ InfoMind 是一个个人知识管理系统，用来把分散在网页、视频�
 - **洞察页**：提供收录趋势折线图和分类/平台/作者嵌套 Treemap，用于复盘注意力分布。
 - **全文搜索**：支持按标题、摘要、作者、标签和备注搜索。
 - **配置管理**：Web UI 和 CLI 均可配置 LLM 参数；敏感 API Key 会加密保存。
+- **macOS 桌面端**：通过 Electron 打包为本地桌面应用，内嵌同一套 Web UI 与 API 服务。
 - **部署支持**：提供 Dockerfile、Docker Compose、生产环境变量模板和云服务器部署手册。
 
 ## 快速开始
 
 ### 环境要求
 
-- Node.js >= 18
+- Node.js >= 20
 - npm
 - SQLite 由 `better-sqlite3` 内嵌使用，无需单独部署数据库
 
@@ -50,6 +51,38 @@ INFOMIND_PORT=3457 npm start
 ```bash
 curl -s http://127.0.0.1:3456/api/health
 ```
+
+### macOS 桌面端
+
+开发模式运行桌面应用：
+
+```bash
+npm run desktop
+```
+
+生成 macOS 安装包：
+
+```bash
+npm run dist:mac
+```
+
+构建产物位于：
+
+```text
+dist/mac-arm64/InfoMind.app
+dist/InfoMind-1.0.0-arm64.dmg
+dist/InfoMind-1.0.0-arm64.zip
+```
+
+桌面端会在本机启动同一套 InfoMind API 服务，并加载同一套 Web UI。首次启动时会把打包时附带的 seed data 复制到 macOS 应用数据目录；也可以用 `INFOMIND_DATA_DIR` 指定数据目录。
+
+注意：Electron 和普通 Node 使用不同的 native module ABI。打包后如果要继续在源码目录运行 `npm start` 或 CLI，请执行：
+
+```bash
+npm run native:node
+```
+
+如果再次构建桌面端，`npm run desktop`、`npm run pack:mac` 和 `npm run dist:mac` 会自动先执行 `native:electron`，确保 SQLite native 模块匹配 Electron。
 
 ## LLM 配置
 
@@ -142,6 +175,7 @@ POST /api/webhook/openclaw
 | Bilibili | `bilibili` | 视频标题、作者、封面 | 支持 |
 | YouTube | `youtube` | oEmbed 元数据 | 支持 |
 | Twitter/X | `twitter` | oEmbed 元数据 | 平台限制较多 |
+| 抖音 | `douyin` | 页面结构 + 分享文本兜底 | 部分支持 |
 | 小红书 | `xiaohongshu` | Open Graph + 页面结构兜底 | 部分支持 |
 | 知乎 | `zhihu` | Open Graph + 分享文本兜底 | 部分支持 |
 | 小宇宙 | `xiaoyuzhou` | 播客/单集标题、节目名、封面 | 支持 |
@@ -218,13 +252,15 @@ infoMind/
 │   │   ├── bookmaker.js    # 作者聚合成书
 │   │   ├── classifier.js   # LLM 分类 + 关键词兜底
 │   │   └── llm.js          # OpenAI-compatible LLM 调用
-│   └── utils/              # 日志、加密工具
+│   └── utils/              # 日志、加密、路径工具
+├── electron/               # macOS 桌面端入口
 ├── public/
 │   ├── index.html          # Web UI 主页面
 │   ├── setup.html          # 配置/初始化辅助页面
 │   ├── js/                 # 前端模块：API、书架、弹窗、洞察页、设置
 │   └── css/                # 旧版/补充样式
 ├── cli/                    # 命令行入口和子命令
+├── build/                  # 桌面端图标等构建资源
 ├── openclaw/               # OpenClaw Skill
 ├── deploy/
 │   ├── README.md           # 云服务器部署手册
@@ -310,8 +346,10 @@ deploy/README.md
 ```bash
 node --check server/index.js
 node --check server/routes/stats.js
+node --check electron/main.js
 node --check public/js/app.js
 node --check public/js/api.js
+npm run pack:mac
 npm start
 curl -s http://127.0.0.1:3456/api/health
 curl -s 'http://127.0.0.1:3456/api/stats/advanced?range=1m'
@@ -329,6 +367,7 @@ curl -s 'http://127.0.0.1:3456/api/stats/advanced?range=1m'
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `INFOMIND_PORT` | `3456` | HTTP 服务端口 |
+| `INFOMIND_DATA_DIR` | `data` | 运行时数据目录；桌面端默认使用 macOS 应用数据目录 |
 | `INFOMIND_DB_PATH` | `data/infomind.db` | SQLite 数据库路径 |
 | `INFOMIND_SECRET` | 内置默认值 | 配置加密密钥，生产环境应显式设置并保持稳定 |
 | `INFOMIND_PUBLIC_URL` | 空 | 可选，部署文档和 Agent 集成使用 |

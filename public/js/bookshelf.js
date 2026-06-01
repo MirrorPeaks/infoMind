@@ -3,6 +3,7 @@ const PLATFORM_META = {
     bilibili: { label: '哔哩哔哩', icon: 'smart_display' },
     youtube: { label: 'YouTube', icon: 'play_circle' },
     twitter: { label: 'X', icon: 'alternate_email' },
+    douyin: { label: '抖音', icon: 'music_video' },
     xiaohongshu: { label: '小红书', icon: 'auto_awesome' },
     zhihu: { label: '知乎', icon: 'help' },
     xiaoyuzhou: { label: '小宇宙', icon: 'podcasts' },
@@ -45,7 +46,7 @@ function getCategoryMeta(category) {
 }
 
 function getPlatformColor(platform) {
-    const colors = { bilibili: '#00a1d6', youtube: '#ff0000', twitter: '#1d9bf0', xiaohongshu: '#ff2442', zhihu: '#0084ff', xiaoyuzhou: '#f5c400', wechat: '#07c160', weibo: '#e6162d' };
+    const colors = { bilibili: '#00a1d6', youtube: '#ff0000', twitter: '#1d9bf0', douyin: '#111111', xiaohongshu: '#ff2442', zhihu: '#0084ff', xiaoyuzhou: '#f5c400', wechat: '#07c160', weibo: '#e6162d' };
     return colors[platform] || '#6b7280';
 }
 
@@ -202,11 +203,10 @@ function renderTimeline(entries, container) {
                 </div>`;
 
             let contentHTML = '';
-            const onclickAttr = `onclick="if('${entry.book_id}') window.openBookModal('${entry.book_id}'); else window.openEntryModal(${JSON.stringify(entry).replace(/"/g, '&quot;')})"`;
 
             if (hasImage) {
                 contentHTML = `
-                <div class="w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer" ${onclickAttr}>
+                <div class="timeline-entry-card w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer">
                     <div class="bg-surface-container-lowest rounded-sm p-1 overflow-hidden transition-all duration-500 hover:bg-surface-container-low shadow-[0_4px_32px_rgba(28,28,22,0.04)]">
                         <div class="p-6 pb-4">
                             <time class="font-label text-xs text-on-surface-variant uppercase tracking-widest mb-3 block">${date} • ${platLabel}</time>
@@ -224,7 +224,7 @@ function renderTimeline(entries, container) {
                 </div>`;
             } else {
                 contentHTML = `
-                <div class="w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer" ${onclickAttr}>
+                <div class="timeline-entry-card w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer">
                     <div class="bg-surface-container-lowest rounded-sm p-8 shadow-[0_4px_32px_rgba(28,28,22,0.04)] transition-all duration-500 hover:bg-surface-container-low">
                         <time class="font-label text-xs text-on-surface-variant uppercase tracking-widest mb-3 block">${date} • ${platLabel}</time>
                         <h3 class="font-headline text-xl text-on-surface mb-3">${escapeHtml(entry.title || '无标题')}</h3>
@@ -238,6 +238,10 @@ function renderTimeline(entries, container) {
             }
 
             item.innerHTML = markerHTML + contentHTML;
+            item.querySelector('.timeline-entry-card')?.addEventListener('click', () => {
+                if (entry.book_id) window.openBookModal(entry.book_id, { fallbackEntry: entry });
+                else window.openEntryModal(entry);
+            });
             rowContainer.appendChild(item);
         });
     });

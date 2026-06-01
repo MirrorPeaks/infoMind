@@ -71,7 +71,12 @@ function buildClassifyText(entry) {
             entry.source_data.title,
             entry.source_data.description,
             entry.source_data.author,
+            entry.source_data.full_text,
+            entry.source_data.subtitle_text,
+            entry.source_data.transcript_clean,
+            entry.source_data.transcript,
             entry.source_data.zhihu_shared_text,
+            entry.source_data.douyin_shared_text,
         ].filter(Boolean).join(' ')
         : '';
     return [

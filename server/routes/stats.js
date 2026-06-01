@@ -18,6 +18,7 @@ const PLATFORM_META = {
     wechat: { label: '微信公众号', icon: 'wechat', color: '#07c160' },
     bilibili: { label: 'Bilibili', icon: 'bilibili', color: '#00a1d6' },
     twitter: { label: 'X', icon: 'x', color: '#111111' },
+    douyin: { label: '抖音', icon: 'douyin', color: '#111111' },
     youtube: { label: 'YouTube', icon: 'youtube', color: '#ff0033' },
     zhihu: { label: '知乎', icon: 'zhihu', color: '#0084ff' },
     xiaoyuzhou: { label: '小宇宙', icon: 'xiaoyuzhou', color: '#f5c400' },

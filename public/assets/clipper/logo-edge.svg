@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Edge">
+  <defs>
+    <linearGradient id="a" x1="16" x2="80" y1="18" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0aa4f6"/>
+      <stop offset=".52" stop-color="#0b74d1"/>
+      <stop offset="1" stop-color="#18c37e"/>
+    </linearGradient>
+    <linearGradient id="b" x1="72" x2="22" y1="68" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35d58d"/>
+      <stop offset="1" stop-color="#00a4ef"/>
+    </linearGradient>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity=".16"/>
+    </filter>
+  </defs>
+  <circle cx="48" cy="48" r="43" fill="url(#a)" filter="url(#s)"/>
+  <path fill="url(#b)" d="M83 58c-4.5 19.2-21.8 32.2-41.5 29.6-17.2-2.3-30-16.3-30-33 0-19.6 15.7-37 37-37 16.8 0 30.8 10.2 35.4 24.6-7.5-8.6-20.4-11.4-31.4-6.2-10.2 4.9-15.9 15.6-13.7 25.6 1.8 8.1 8.6 13.8 17.6 14.5 11.4.9 21.5-5.7 26.6-18.1Z"/>
+  <path fill="#fff" opacity=".86" d="M31.5 56.6c1.9-11 11.8-19.8 24.6-19.8 11 0 20.6 5.9 26.1 14.5-3.4 4.8-11.5 8.5-22.5 8.5H34.2c-2 0-3-.9-2.7-3.2Z"/>
+</svg>

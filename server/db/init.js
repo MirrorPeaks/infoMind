@@ -3,8 +3,8 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const { getDbPath, getCoversDir } = require('../utils/paths');
 
-const DB_PATH = process.env.INFOMIND_DB_PATH || path.join(__dirname, '../../data/infomind.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 const CATEGORIES = [
@@ -45,20 +45,21 @@ function getDb() {
 }
 
 function initDb() {
+    const dbPath = getDbPath();
     // Ensure data directory exists
-    const dataDir = path.dirname(DB_PATH);
+    const dataDir = path.dirname(dbPath);
     if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
         logger.info(`Created data directory: ${dataDir}`);
     }
 
     // Also ensure covers directory
-    const coversDir = path.join(dataDir, 'covers');
+    const coversDir = getCoversDir();
     if (!fs.existsSync(coversDir)) {
         fs.mkdirSync(coversDir, { recursive: true });
     }
 
-    db = new Database(DB_PATH);
+    db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
 
@@ -82,7 +83,7 @@ function initDb() {
         logger.info('Seeded 25 categories');
     }
 
-    logger.success(`Database ready: ${DB_PATH}`);
+    logger.success(`Database ready: ${dbPath}`);
     return db;
 }
 

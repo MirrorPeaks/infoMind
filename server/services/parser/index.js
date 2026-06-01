@@ -6,6 +6,7 @@ const { twitterParse } = require('./twitter');
 const { xiaohongshuParse } = require('./xiaohongshu');
 const { zhihuParse } = require('./zhihu');
 const { xiaoyuzhouParse } = require('./xiaoyuzhou');
+const { douyinParse } = require('./douyin');
 const logger = require('../../utils/logger');
 
 const PARSERS = {
@@ -15,6 +16,7 @@ const PARSERS = {
     xiaohongshu: xiaohongshuParse,
     zhihu: zhihuParse,
     xiaoyuzhou: xiaoyuzhouParse,
+    douyin: douyinParse,
 };
 
 async function parseUrl(url) {

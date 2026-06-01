@@ -2,13 +2,19 @@
     "name": "infomind",
     "version": "1.0.0",
     "description": "个人知识管理系统 - 将网络内容智能分类展示为书架",
-    "main": "server/index.js",
+    "main": "electron/main.js",
     "bin": {
         "infomind": "./cli/index.js"
     },
     "scripts": {
         "start": "node server/index.js",
         "dev": "NODE_ENV=development node server/index.js",
+        "native:electron": "electron-rebuild -f -w better-sqlite3 -v 31.7.7 --build-from-source",
+        "desktop": "npm run native:electron && electron .",
+        "desktop:deps": "electron-builder install-app-deps",
+        "native:node": "npm rebuild better-sqlite3",
+        "pack:mac": "npm run native:electron && USE_HARD_LINKS=false electron-builder --mac --dir --config.npmRebuild=false",
+        "dist:mac": "npm run native:electron && USE_HARD_LINKS=false electron-builder --mac --config.npmRebuild=false",
         "cli": "node cli/index.js",
         "setup:stt": "bash scripts/setup-stt-macos.sh"
     },
@@ -22,7 +28,7 @@
     "license": "MIT",
     "dependencies": {
         "axios": "^1.4.0",
-        "better-sqlite3": "^9.4.3",
+        "better-sqlite3": "^12.10.0",
         "chalk": "^4.1.2",
         "cheerio": "^1.0.0-rc.12",
         "cli-table3": "^0.6.3",
@@ -33,6 +39,49 @@
         "uuid": "^9.0.0"
     },
     "engines": {
-        "node": ">=18.0.0"
+        "node": ">=20.0.0"
+    },
+    "devDependencies": {
+        "electron": "^31.7.7",
+        "electron-builder": "^26.8.1"
+    },
+    "build": {
+        "appId": "com.infomind.desktop",
+        "productName": "InfoMind",
+        "artifactName": "${productName}-${version}-${arch}.${ext}",
+        "icon": "build/icon.png",
+        "asar": true,
+        "asarUnpack": [
+            "node_modules/better-sqlite3/**/*"
+        ],
+        "files": [
+            "electron/**/*",
+            "server/**/*",
+            "public/**/*",
+            "extensions/**/*",
+            "cli/**/*",
+            "openclaw/**/*",
+            "deploy/hermes/**/*",
+            "scripts/**/*",
+            "package.json"
+        ],
+        "extraResources": [
+            {
+                "from": "data",
+                "to": "seed-data",
+                "filter": [
+                    "**/*",
+                    "!*.db-wal",
+                    "!*.db-shm"
+                ]
+            }
+        ],
+        "mac": {
+            "category": "public.app-category.productivity",
+            "target": [
+                "dmg",
+                "zip"
+            ]
+        }
     }
 }

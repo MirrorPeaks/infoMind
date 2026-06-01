@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>InfoMind Clipper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="panel">
+    <header>
+      <span class="mark">IM</span>
+      <div>
+        <h1>InfoMind Clipper</h1>
+        <p>保存当前页面，不需要 Cookie 配置</p>
+      </div>
+    </header>
+
+    <label>
+      <span>InfoMind 地址</span>
+      <input id="baseUrl" type="url" placeholder="http://127.0.0.1:3456">
+    </label>
+
+    <label>
+      <span>配对码</span>
+      <input id="token" type="password" placeholder="从 InfoMind 设置页复制">
+    </label>
+
+    <button id="saveBtn" type="button">Save to InfoMind</button>
+    <p id="status" class="status">打开 InfoMind 设置页完成首次配对。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

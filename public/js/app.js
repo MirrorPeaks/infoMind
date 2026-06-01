@@ -22,6 +22,7 @@ const DASHBOARD_PLATFORM_META = {
     wechat: { label: '微信公众号', color: '#07c160', logo: 'https://mp.weixin.qq.com/favicon.ico' },
     bilibili: { label: 'Bilibili', color: '#00a1d6', logo: 'https://www.bilibili.com/favicon.ico' },
     twitter: { label: 'X', color: '#111111', logo: 'https://x.com/favicon.ico' },
+    douyin: { label: '抖音', color: '#111111', logo: 'https://www.douyin.com/favicon.ico' },
     youtube: { label: 'YouTube', color: '#ff0033', logo: 'https://www.youtube.com/favicon.ico' },
     zhihu: { label: '知乎', color: '#0084ff', logo: 'https://static.zhihu.com/heifetz/favicon.ico' },
     xiaoyuzhou: { label: '小宇宙', color: '#f5c400', logo: 'https://www.xiaoyuzhoufm.com/favicon-32x32.png' },

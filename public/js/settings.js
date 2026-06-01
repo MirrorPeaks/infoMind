@@ -13,6 +13,8 @@ function initSettings() {
         const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
         el.addEventListener(eventName, updateAgentConnectCommand);
     });
+    document.getElementById('copyClipperTokenBtn')?.addEventListener('click', copyClipperToken);
+    document.getElementById('copyClipperBaseUrlBtn')?.addEventListener('click', copyClipperBaseUrl);
 }
 
 async function openSettings() {
@@ -45,6 +47,7 @@ async function openSettings() {
 
     initAgentConnectFields();
     updateAgentConnectCommand();
+    loadClipperPairing();
 }
 
 function closeSettings() {
@@ -163,9 +166,50 @@ function shellQuote(value) {
     return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
+async function loadClipperPairing() {
+    const tokenEl = document.getElementById('clipperPairingToken');
+    const baseEl = document.getElementById('clipperBaseUrl');
+    const statusEl = document.getElementById('clipperStatus');
+    if (!tokenEl || !baseEl || !statusEl) return;
+
+    tokenEl.textContent = 'Loading...';
+    baseEl.textContent = window.location.origin;
+    statusEl.textContent = '正在检查本地服务';
+
+    try {
+        const res = await api.getClipperPairing();
+        const token = res.data?.token || '';
+        const baseUrl = res.data?.base_url || window.location.origin;
+        tokenEl.textContent = token;
+        baseEl.textContent = baseUrl;
+        statusEl.textContent = baseUrl.includes(':3456')
+            ? '可连接：插件会自动发现本机 InfoMind'
+            : '可连接：当前端口不是默认值，首次配对时请填入下方地址';
+        statusEl.className = 'text-xs text-success';
+    } catch (err) {
+        tokenEl.textContent = '无法读取';
+        statusEl.textContent = err.message || '连接信息加载失败';
+        statusEl.className = 'text-xs text-error';
+    }
+}
+
+function copyClipperToken() {
+    const token = document.getElementById('clipperPairingToken')?.textContent || '';
+    if (!token || token === 'Loading...' || token === '无法读取') return;
+    navigator.clipboard.writeText(token).then(() => window.showToast('配对码已复制', 'success'));
+}
+
+function copyClipperBaseUrl() {
+    const baseUrl = document.getElementById('clipperBaseUrl')?.textContent || window.location.origin;
+    navigator.clipboard.writeText(baseUrl).then(() => window.showToast('连接地址已复制', 'success'));
+}
+
 window.initSettings = initSettings;
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
 window.toggleApiKeyVisibility = toggleApiKeyVisibility;
 window.copyAgentConnectCommand = copyAgentConnectCommand;
 window.updateAgentConnectCommand = updateAgentConnectCommand;
+window.loadClipperPairing = loadClipperPairing;
+window.copyClipperToken = copyClipperToken;
+window.copyClipperBaseUrl = copyClipperBaseUrl;

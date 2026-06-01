@@ -58,6 +58,10 @@ class ApiClient {
     getConfig() { return this.get('/api/config'); }
     saveConfig(data) { return this.put('/api/config', data); }
     testLlm() { return this.post('/api/config/test-llm'); }
+
+    // Browser Clipper
+    getClipperPairing() { return this.get('/api/clipper/pairing'); }
+    getClipperHello() { return this.get('/api/clipper/hello'); }
 }
 
 window.api = new ApiClient();

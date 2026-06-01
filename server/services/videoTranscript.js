@@ -7,17 +7,35 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { chat } = require('./llm');
 const queries = require('../db/queries');
+const { getModelsDir } = require('../utils/paths');
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const TRANSCRIPT_REPAIR_CHARS = 24000;
 const TRANSCRIPT_REPAIR_CHUNK = 3200;
 
 function isVideoPlatform(platform) {
-    return platform === 'bilibili' || platform === 'youtube';
+    return platform === 'bilibili' || platform === 'youtube' || platform === 'douyin';
+}
+
+function isVideoEntry(entryOrPlatform) {
+    if (!entryOrPlatform || typeof entryOrPlatform === 'string') return isVideoPlatform(entryOrPlatform);
+    const platform = entryOrPlatform.platform;
+    if (platform === 'bilibili' || platform === 'youtube') return true;
+    if (platform !== 'douyin') return false;
+
+    const source = entryOrPlatform.source_data || {};
+    const type = String(source.content_type || '').toLowerCase();
+    if (['note', 'image', 'images', 'photo', 'photos', '图文'].includes(type)) return false;
+    if (['video', 'aweme_video'].includes(type)) return true;
+    if (source.video_url || source.videoUrl || source.play_addr || source.playAddr) return true;
+    const url = `${entryOrPlatform.url || ''} ${source.final_url || ''}`.toLowerCase();
+    if (/\/note\//i.test(url)) return false;
+    if (/\/video\//i.test(url)) return true;
+    return false;
 }
 
 async function ensureVideoTranscript(entry, progress = async () => {}, { force = false } = {}) {
-    if (!isVideoPlatform(entry.platform)) return { ok: false, reason: '当前条目不是视频平台内容。' };
+    if (!isVideoEntry(entry)) return { ok: false, reason: getNonVideoReason(entry) };
 
     const sourceData = entry.source_data || {};
     const existing = sourceData.transcript_clean || sourceData.subtitle_text || sourceData.transcript_raw;
@@ -161,26 +179,62 @@ async function transcribeEntryAudio(entry, progress = async () => {}) {
 
     const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'infomind-stt-'));
     try {
-        const meta = await runJson(ytDlp, ['--dump-json', '--no-playlist', entry.url], { timeout: 45000 });
-        if (meta?.duration && Number(meta.duration) > maxDuration) {
-            return { ok: false, reason: `视频时长 ${Math.round(meta.duration / 60)} 分钟，超过自动转写上限。`, setup_action: 'manual_transcript' };
+        const mediaUrl = getTranscriptMediaUrl(entry);
+        const directVideoUrl = getDirectVideoUrl(entry);
+        const knownDuration = getKnownDuration(entry);
+        let meta = null;
+        try {
+            meta = await runJson(ytDlp, [
+                ...getYtDlpRequestArgs(entry),
+                '--dump-json',
+                '--no-playlist',
+                mediaUrl,
+            ], { timeout: 45000 });
+        } catch (err) {
+            if (!directVideoUrl) {
+                return {
+                    ok: false,
+                    reason: buildVideoDownloadReason(entry, err),
+                    setup_action: 'manual_transcript',
+                };
+            }
         }
 
-        await run(ytDlp, [
-            '--no-playlist',
-            '-f', 'ba/bestaudio',
-            '-x',
-            '--audio-format', 'wav',
-            '--audio-quality', '5',
-            '-o', path.join(workDir, 'source.%(ext)s'),
-            entry.url,
-        ], { timeout: 30 * 60 * 1000 });
-        await progress(42, '音频转码');
+        const duration = Number(meta?.duration || knownDuration || 0);
+        if (duration && duration > maxDuration) {
+            return { ok: false, reason: `视频时长 ${Math.round(duration / 60)} 分钟，超过自动转写上限。`, setup_action: 'manual_transcript' };
+        }
 
-        const downloaded = (await fsp.readdir(workDir)).find(name => /^source\./.test(name));
-        if (!downloaded) return { ok: false, reason: '音频下载失败，未生成可转写文件。' };
         const wavPath = path.join(workDir, 'audio.wav');
-        await run(ffmpeg, ['-y', '-i', path.join(workDir, downloaded), '-ar', '16000', '-ac', '1', wavPath], { timeout: 15 * 60 * 1000 });
+        let downloaded = null;
+        try {
+            downloaded = await downloadAudioWithYtDlp(entry, ytDlp, mediaUrl, workDir);
+        } catch (downloadErr) {
+            if (!directVideoUrl) {
+                return {
+                    ok: false,
+                    reason: buildVideoDownloadReason(entry, downloadErr),
+                    setup_action: 'manual_transcript',
+                };
+            }
+            try {
+                await progress(42, '音频转码');
+                await transcodeRemoteVideo(ffmpeg, directVideoUrl, wavPath, entry);
+            } catch (directErr) {
+                return {
+                    ok: false,
+                    reason: buildVideoDownloadReason(entry, directErr),
+                    setup_action: 'manual_transcript',
+                };
+            }
+        }
+
+        if (downloaded) {
+            await progress(42, '音频转码');
+            await run(ffmpeg, ['-y', '-i', downloaded, '-ar', '16000', '-ac', '1', wavPath], { timeout: 15 * 60 * 1000 });
+        }
+
+        if (!fs.existsSync(wavPath)) return { ok: false, reason: '音频下载或转码失败，未生成可转写文件。' };
 
         await progress(52, '本地语音转文字');
         const outputBase = path.join(workDir, 'transcript');
@@ -195,6 +249,107 @@ async function transcribeEntryAudio(entry, progress = async () => {}) {
     }
 }
 
+async function downloadAudioWithYtDlp(entry, ytDlp, mediaUrl, workDir) {
+    await run(ytDlp, [
+        ...getYtDlpRequestArgs(entry),
+        '--no-playlist',
+        '-f', entry.platform === 'douyin' ? 'ba/bestaudio/best' : 'ba/bestaudio',
+        '-x',
+        '--audio-format', 'wav',
+        '--audio-quality', '5',
+        '-o', path.join(workDir, 'source.%(ext)s'),
+        mediaUrl,
+    ], { timeout: 30 * 60 * 1000 });
+
+    const downloaded = (await fsp.readdir(workDir)).find(name => /^source\./.test(name));
+    if (!downloaded) throw new Error('音频下载失败，未生成可转写文件。');
+    return path.join(workDir, downloaded);
+}
+
+async function transcodeRemoteVideo(ffmpeg, videoUrl, wavPath, entry) {
+    await run(ffmpeg, [
+        '-y',
+        '-headers', buildFfmpegHeaders(entry),
+        '-i', videoUrl,
+        '-vn',
+        '-ar', '16000',
+        '-ac', '1',
+        wavPath,
+    ], { timeout: 30 * 60 * 1000 });
+}
+
+function getTranscriptMediaUrl(entry) {
+    const source = entry.source_data || {};
+    if (entry.platform === 'douyin') {
+        return source.final_url || entry.url;
+    }
+    return entry.url;
+}
+
+function getDirectVideoUrl(entry) {
+    const source = entry.source_data || {};
+    const candidates = [
+        source.video_url,
+        source.videoUrl,
+        source.play_addr,
+        source.playAddr,
+        source.download_url,
+        source.downloadUrl,
+    ];
+    return candidates.find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || null;
+}
+
+function getKnownDuration(entry) {
+    const source = entry.source_data || {};
+    const value = source.duration || source.duration_seconds || source.durationSeconds || source.video_duration || source.videoDuration;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return null;
+    return number > 10000 ? Math.round(number / 1000) : Math.round(number);
+}
+
+function getYtDlpRequestArgs(entry) {
+    return [
+        '--user-agent', USER_AGENT,
+        '--referer', getPlatformReferer(entry),
+        '--add-header', 'Accept-Language:zh-CN,zh;q=0.9,en;q=0.8',
+    ];
+}
+
+function buildFfmpegHeaders(entry) {
+    return [
+        `User-Agent: ${USER_AGENT}`,
+        `Referer: ${getPlatformReferer(entry)}`,
+        'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8',
+        '',
+    ].join('\r\n');
+}
+
+function getPlatformReferer(entry) {
+    if (entry.platform === 'bilibili') return 'https://www.bilibili.com/';
+    if (entry.platform === 'youtube') return 'https://www.youtube.com/';
+    if (entry.platform === 'douyin') return 'https://www.douyin.com/';
+    try {
+        return new URL(entry.url).origin + '/';
+    } catch {
+        return entry.url || '';
+    }
+}
+
+function buildVideoDownloadReason(entry, err) {
+    const detail = String(err?.message || err || '').replace(/\s+/g, ' ').slice(0, 220);
+    if (entry.platform === 'douyin') {
+        return `抖音视频无法自动下载音频。可能是短链过期、视频权限限制或平台阻止后端直连。请先用已登录浏览器里的 InfoMind Clipper 收录字幕/正文；仍不足时再使用本地转写或 Agent 增强。${detail ? ` 细节：${detail}` : ''}`;
+    }
+    return `无法自动下载视频音频。${detail ? `细节：${detail}` : ''}`;
+}
+
+function getNonVideoReason(entry) {
+    if (entry?.platform === 'douyin') {
+        return '当前抖音条目被识别为图文内容，不会进入音频转写。请在已登录浏览器里使用 InfoMind Clipper 重新收录图文正文和图片。';
+    }
+    return '当前条目不是视频平台内容。';
+}
+
 async function getTranscriptionSetupStatus() {
     const ytDlp = await findCommand([
         'yt-dlp',
@@ -205,7 +360,7 @@ async function getTranscriptionSetupStatus() {
     ]);
     const ffmpeg = await findCommand(['ffmpeg', '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg']);
     const whisper = await findCommand(['whisper-cli', '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli', 'main', 'whisper']);
-    const modelPath = process.env.INFOMIND_STT_MODEL_PATH || path.join(process.cwd(), 'data/models/ggml-base.bin');
+    const modelPath = process.env.INFOMIND_STT_MODEL_PATH || path.join(getModelsDir(), 'ggml-base.bin');
     const maxDuration = Number(process.env.INFOMIND_STT_MAX_DURATION || 7200);
     const language = process.env.INFOMIND_STT_LANGUAGE || 'auto';
     const missingTools = [];
@@ -370,4 +525,5 @@ module.exports = {
     cleanTranscriptWithLlm,
     getTranscriptionSetupStatus,
     isVideoPlatform,
+    isVideoEntry,
 };

@@ -8,5 +8,9 @@ module.exports = new Command('serve')
     .action((opts) => {
         process.env.INFOMIND_PORT = opts.port;
         console.log(chalk.cyan(`\n🧠 正在启动 InfoMind 服务器 (端口: ${opts.port})...\n`));
-        require('../../server/index');
+        const { startServer } = require('../../server/index');
+        startServer({ port: opts.port }).catch((err) => {
+            console.error(chalk.red(`启动失败: ${err.message}`));
+            process.exit(1);
+        });
     });

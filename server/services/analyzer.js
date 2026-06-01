@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { chat, getConfiguredModel } = require('./llm');
 const { extractEntryContent } = require('./contentExtractor');
-const { ensureVideoTranscript, isVideoPlatform } = require('./videoTranscript');
+const { ensureVideoTranscript, isVideoEntry } = require('./videoTranscript');
 const queries = require('../db/queries');
 const logger = require('../utils/logger');
 
@@ -48,7 +48,7 @@ async function runEntryAnalysisNow(entryId, { force = false } = {}) {
     }
 
     await updateProgress(entry, 8, '准备正文');
-    if (force && isVideoPlatform(entry.platform)) {
+    if (force && isVideoEntry(entry)) {
         const transcript = await ensureVideoTranscript(entry, (progress, stage) => updateProgress(entry, progress, stage), { force: true });
         if (transcript.ok) {
             entry = queries.getEntryById(entryId);
@@ -65,7 +65,7 @@ async function runEntryAnalysisNow(entryId, { force = false } = {}) {
         return existing;
     }
 
-    if (!extracted.hasEnoughContent && isVideoPlatform(entry.platform)) {
+    if (!extracted.hasEnoughContent && isVideoEntry(entry)) {
         const transcript = await ensureVideoTranscript(entry, (progress, stage) => updateProgress(entry, progress, stage), { force });
         if (transcript.ok) {
             entry = queries.getEntryById(entryId);
@@ -376,6 +376,7 @@ function getRequiredContent(platform) {
     if (['bilibili', 'youtube'].includes(platform)) return '字幕、视频转录文本或人工整理稿';
     if (platform === 'xiaoyuzhou') return '播客文稿或音频转录文本';
     if (platform === 'xiaohongshu') return '帖子正文、图片 OCR 或浏览器抓取正文';
+    if (platform === 'douyin') return '字幕、视频转录文本、图文正文或图片 OCR';
     return '正文内容或可读网页文本';
 }
 

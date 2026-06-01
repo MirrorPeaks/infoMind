@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "InfoMind Clipper",
+  "version": "0.1.0",
+  "description": "Save logged-in web pages, notes, and videos to the local InfoMind app without exporting cookies.",
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "action": {
+    "default_title": "Save to InfoMind",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["clipper-core.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
