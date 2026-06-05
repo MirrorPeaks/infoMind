@@ -15,6 +15,7 @@ function initSettings() {
     });
     document.getElementById('copyClipperTokenBtn')?.addEventListener('click', copyClipperToken);
     document.getElementById('copyClipperBaseUrlBtn')?.addEventListener('click', copyClipperBaseUrl);
+    document.getElementById('refreshCaptureJobsBtn')?.addEventListener('click', loadCaptureJobSummary);
 }
 
 async function openSettings() {
@@ -48,6 +49,7 @@ async function openSettings() {
     initAgentConnectFields();
     updateAgentConnectCommand();
     loadClipperPairing();
+    loadCaptureJobSummary();
 }
 
 function closeSettings() {
@@ -193,6 +195,89 @@ async function loadClipperPairing() {
     }
 }
 
+async function loadCaptureJobSummary() {
+    const summaryEl = document.getElementById('captureJobSummary');
+    const listEl = document.getElementById('captureJobList');
+    if (!summaryEl || !listEl) return;
+    summaryEl.textContent = '正在读取采集队列...';
+    listEl.innerHTML = '';
+
+    try {
+        const res = await api.getCaptureJobSummary();
+        const data = res.data || {};
+        const byStatus = data.by_status || {};
+        const total = data.total_active || 0;
+        summaryEl.className = 'mt-1 text-xs text-on-surface-variant';
+        summaryEl.textContent = total
+            ? `共有 ${total} 条待处理任务：${formatJobStatusCounts(byStatus)}`
+            : '当前没有待处理任务。手机飞书发来的抖音链接会显示在这里。';
+
+        const jobs = data.recent || [];
+        if (!jobs.length) return;
+        listEl.innerHTML = jobs.map(job => `
+            <div class="flex items-start justify-between gap-3 rounded-lg bg-surface-container-low border border-outline-variant/10 p-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="material-symbols-outlined text-[16px] text-primary">${jobStatusIcon(job.status)}</span>
+                        <span class="font-label text-xs text-on-surface">${escapeHtml(jobStatusLabel(job.status))}</span>
+                        <span class="font-label text-[11px] text-on-surface-variant">${escapeHtml(job.platform || 'web')}</span>
+                    </div>
+                    <p class="font-mono text-[11px] text-on-surface-variant break-all">${escapeHtml(job.url)}</p>
+                    ${job.error ? `<p class="mt-1 text-xs text-error">${escapeHtml(job.error)}</p>` : ''}
+                </div>
+                <button type="button" class="text-error hover:underline font-label text-xs whitespace-nowrap" data-capture-job-delete="${escapeHtml(job.id)}">删除</button>
+            </div>
+        `).join('');
+        listEl.querySelectorAll('[data-capture-job-delete]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-capture-job-delete');
+                try {
+                    await api.deleteCaptureJob(id);
+                    window.showToast('采集任务已删除', 'success');
+                    loadCaptureJobSummary();
+                } catch (err) {
+                    window.showToast('删除失败: ' + err.message, 'error');
+                }
+            });
+        });
+    } catch (err) {
+        summaryEl.textContent = err.message || '采集队列读取失败';
+        summaryEl.className = 'mt-1 text-xs text-error';
+    }
+}
+
+function formatJobStatusCounts(byStatus) {
+    return Object.entries(byStatus)
+        .map(([status, count]) => `${jobStatusLabel(status)} ${count}`)
+        .join(' / ');
+}
+
+function jobStatusLabel(status) {
+    const labels = {
+        queued: '等待插件',
+        opening: '打开页面',
+        capturing: '采集中',
+        saved: '已收录',
+        failed: '失败',
+        needs_login: '需要登录',
+        needs_user_action: '需要手动处理',
+    };
+    return labels[status] || status || '未知';
+}
+
+function jobStatusIcon(status) {
+    const icons = {
+        queued: 'hourglass_empty',
+        opening: 'open_in_new',
+        capturing: 'travel_explore',
+        saved: 'check_circle',
+        failed: 'error',
+        needs_login: 'login',
+        needs_user_action: 'pan_tool',
+    };
+    return icons[status] || 'pending';
+}
+
 function copyClipperToken() {
     const token = document.getElementById('clipperPairingToken')?.textContent || '';
     if (!token || token === 'Loading...' || token === '无法读取') return;
@@ -213,3 +298,4 @@ window.updateAgentConnectCommand = updateAgentConnectCommand;
 window.loadClipperPairing = loadClipperPairing;
 window.copyClipperToken = copyClipperToken;
 window.copyClipperBaseUrl = copyClipperBaseUrl;
+window.loadCaptureJobSummary = loadCaptureJobSummary;

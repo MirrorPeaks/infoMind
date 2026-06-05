@@ -865,7 +865,8 @@ function formatChartDate(date, range) {
 async function handleSearch(query) {
     query = sanitizeSearchQuery(query);
     if (!query) {
-        setView('shelf');
+        state.searchQuery = '';
+        if (state.view === 'search') setView('shelf');
         return;
     }
 
@@ -1229,6 +1230,16 @@ async function handleAddUrl() {
 
     try {
         const res = await api.addEntry(url, noteInput.value.trim());
+        if (res.pending_capture) {
+            _hideSaveOverlay();
+            statusEl.textContent = res.message || '已进入浏览器采集队列';
+            showToast('已加入抖音浏览器采集队列', 'success');
+            urlInput.value = '';
+            noteInput.value = '';
+            await loadCaptureJobSummary?.();
+            setTimeout(() => closeQuickAdd(), 2200);
+            return;
+        }
         const entry = res.data;
 
         _hideSaveOverlay();

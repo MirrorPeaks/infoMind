@@ -104,3 +104,4 @@ button:disabled {
 
 .status.ok { color: #0f7a47; }
 .status.error { color: #b42318; }
+.status.muted { color: var(--muted); }

@@ -81,6 +81,9 @@ function updateEntry(id, data) {
     if (data.book_id !== undefined) { fields.push('book_id = ?'); params.push(data.book_id); }
     if (data.summary !== undefined) { fields.push('summary = ?'); params.push(data.summary); }
     if (data.title !== undefined) { fields.push('title = ?'); params.push(data.title); }
+    if (data.author !== undefined) { fields.push('author = ?'); params.push(data.author); }
+    if (data.cover_url !== undefined) { fields.push('cover_url = ?'); params.push(data.cover_url); }
+    if (data.cover_local !== undefined) { fields.push('cover_local = ?'); params.push(data.cover_local); }
     if (data.source_data !== undefined) { fields.push('source_data = ?'); params.push(JSON.stringify(data.source_data)); }
 
     if (!fields.length) return getEntryById(id);
@@ -96,6 +99,7 @@ function deleteEntry(id) {
     const entry = getEntryById(id);
     if (!entry) return false;
     db.prepare('DELETE FROM entry_analysis WHERE entry_id = ?').run(id);
+    db.prepare('DELETE FROM capture_jobs WHERE entry_id = ?').run(id);
     db.prepare('DELETE FROM entries WHERE id = ?').run(id);
     // Update book count
     if (entry.book_id) {
@@ -169,6 +173,111 @@ function parseEntryAnalysis(row) {
         ...row,
         result: safeJsonParse(row.result_json, {}),
     };
+}
+
+// ─── Capture Jobs ────────────────────────────────────────────────────────────
+
+function createCaptureJob(data) {
+    const db = getDb();
+    const id = data.id || uuidv4();
+    db.prepare(`
+        INSERT INTO capture_jobs (
+            id, url, normalized_url, platform, source_channel, source_message,
+            status, entry_id, error, attempts
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        id,
+        data.url,
+        data.normalized_url || normalizeJobUrl(data.url),
+        data.platform || 'web',
+        data.source_channel || 'manual',
+        data.source_message || null,
+        data.status || 'queued',
+        data.entry_id || null,
+        data.error || null,
+        Number.isFinite(data.attempts) ? data.attempts : 0
+    );
+    return getCaptureJobById(id);
+}
+
+function getCaptureJobById(id) {
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM capture_jobs WHERE id = ?').get(id);
+    return row || null;
+}
+
+function findActiveCaptureJobByUrl(url) {
+    const db = getDb();
+    const normalized = normalizeJobUrl(url);
+    return db.prepare(`
+        SELECT * FROM capture_jobs
+        WHERE (url = ? OR normalized_url = ?)
+          AND status IN ('queued', 'opening', 'capturing', 'needs_login', 'needs_user_action', 'failed')
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1
+    `).get(url, normalized) || null;
+}
+
+function findCaptureJobByUrl(url) {
+    const db = getDb();
+    const normalized = normalizeJobUrl(url);
+    return db.prepare(`
+        SELECT * FROM capture_jobs
+        WHERE url = ? OR normalized_url = ?
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1
+    `).get(url, normalized) || null;
+}
+
+function listCaptureJobs({ status, platform, limit = 20 } = {}) {
+    const db = getDb();
+    const conditions = [];
+    const params = [];
+    if (status) {
+        const statuses = Array.isArray(status) ? status : String(status).split(',').map(s => s.trim()).filter(Boolean);
+        if (statuses.length) {
+            conditions.push(`status IN (${statuses.map(() => '?').join(', ')})`);
+            params.push(...statuses);
+        }
+    }
+    if (platform) { conditions.push('platform = ?'); params.push(platform); }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    return db.prepare(`
+        SELECT * FROM capture_jobs
+        ${where}
+        ORDER BY datetime(created_at) ASC
+        LIMIT ?
+    `).all(...params, limit);
+}
+
+function updateCaptureJob(id, data) {
+    const db = getDb();
+    const fields = [];
+    const params = [];
+    if (data.url !== undefined) { fields.push('url = ?'); params.push(data.url); }
+    if (data.normalized_url !== undefined) { fields.push('normalized_url = ?'); params.push(data.normalized_url); }
+    if (data.platform !== undefined) { fields.push('platform = ?'); params.push(data.platform); }
+    if (data.source_channel !== undefined) { fields.push('source_channel = ?'); params.push(data.source_channel); }
+    if (data.source_message !== undefined) { fields.push('source_message = ?'); params.push(data.source_message); }
+    if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status); }
+    if (data.entry_id !== undefined) { fields.push('entry_id = ?'); params.push(data.entry_id); }
+    if (data.error !== undefined) { fields.push('error = ?'); params.push(data.error); }
+    if (data.attempts !== undefined) { fields.push('attempts = ?'); params.push(data.attempts); }
+    if (data.increment_attempts) fields.push('attempts = attempts + 1');
+    if (data.completed_at !== undefined) { fields.push('completed_at = ?'); params.push(data.completed_at); }
+    if (data.finish_now) fields.push('completed_at = CURRENT_TIMESTAMP');
+
+    if (!fields.length) return getCaptureJobById(id);
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+    db.prepare(`UPDATE capture_jobs SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+    return getCaptureJobById(id);
+}
+
+function deleteCaptureJob(id) {
+    const db = getDb();
+    const result = db.prepare('DELETE FROM capture_jobs WHERE id = ?').run(id);
+    return result.changes > 0;
 }
 
 // ─── Books ────────────────────────────────────────────────────────────────────
@@ -363,9 +472,23 @@ function collapseRepeatedText(text) {
     return value;
 }
 
+function normalizeJobUrl(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        parsed.hash = '';
+        for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) {
+            parsed.searchParams.delete(key);
+        }
+        return parsed.toString().replace(/\/$/, '');
+    } catch {
+        return String(url || '').trim();
+    }
+}
+
 module.exports = {
     createEntry, getEntryById, getEntryByUrl, listEntries, searchEntries, updateEntry, deleteEntry,
     getEntryAnalysis, upsertEntryAnalysis,
+    createCaptureJob, getCaptureJobById, findCaptureJobByUrl, findActiveCaptureJobByUrl, listCaptureJobs, updateCaptureJob, deleteCaptureJob,
     findBook, createBook, updateBook, updateBookCount, listBooks, getBookById, getBookEntries,
     listCategories,
     getConfig, setConfig, getAllConfig,

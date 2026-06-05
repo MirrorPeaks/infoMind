@@ -100,6 +100,28 @@ function ensureMigrations() {
     for (const [column, sql] of migrations) {
         if (!entryAnalysisColumns.has(column)) db.exec(sql);
     }
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS capture_jobs (
+            id             TEXT PRIMARY KEY,
+            url            TEXT NOT NULL,
+            normalized_url TEXT,
+            platform       TEXT NOT NULL DEFAULT 'web',
+            source_channel TEXT DEFAULT 'manual',
+            source_message TEXT,
+            status         TEXT NOT NULL DEFAULT 'queued',
+            entry_id       TEXT,
+            error          TEXT,
+            attempts       INTEGER DEFAULT 0,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at   DATETIME,
+            FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_capture_jobs_status     ON capture_jobs(status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_capture_jobs_url        ON capture_jobs(url);
+        CREATE INDEX IF NOT EXISTS idx_capture_jobs_normalized ON capture_jobs(normalized_url);
+    `);
 }
 
 module.exports = { initDb, getDb };

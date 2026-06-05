@@ -50,6 +50,23 @@ If the user sends multiple URLs with a collection intent, save each URL separate
 
 If the user sends a URL without collection intent, only save it when the surrounding request clearly means collection. For example, save for "这个不错，记一下 <URL>", but do not save for "帮我总结这个 <URL>" unless the user also asks to save it.
 
+### Douyin Mobile Links
+
+For Douyin URLs (`douyin.com`, `v.douyin.com`, `iesdouyin.com`), do not call `/api/entries` first. Douyin needs the user's logged-in Chrome session. Create a browser capture job instead:
+
+```bash
+curl -s -X POST "$INFOMIND_BASE_URL/api/capture-jobs" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"<URL>","platform":"douyin","source_channel":"feishu","source_message":"<original visible message>"}'
+```
+
+Tell the user:
+
+- `queued`, `opening`, `capturing`: 已收到，正在让 Mac 上的 InfoMind Clipper 用浏览器登录态采集。
+- `saved`: 已收录。
+- `needs_login`: 需要先在 Mac Chrome 登录抖音，然后重试。
+- `failed` or `needs_user_action`: 采集失败或需要手动打开页面处理。
+
 ## Save a Link
 
 For each URL that should be saved, call:

@@ -85,6 +85,23 @@ curl -s -X POST "__INFOMIND_BASE_URL__/api/entries" \
 
 If there are multiple URLs, save them one by one. If InfoMind reports that the URL already exists, tell the user it is already in the knowledge base.
 
+### Douyin Mobile Links
+
+For Douyin URLs (`douyin.com`, `v.douyin.com`, `iesdouyin.com`), do not call `/api/entries` first. Douyin needs the user's logged-in Chrome session. Create a browser capture job:
+
+```bash
+curl -s -X POST "__INFOMIND_BASE_URL__/api/capture-jobs" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"<URL>","platform":"douyin","source_channel":"feishu","source_message":"<original visible message>"}'
+```
+
+Reply according to the job status:
+
+- `queued`, `opening`, `capturing`: 已收到，正在让 Mac 上的 InfoMind Clipper 用浏览器登录态采集。
+- `saved`: 已收录。
+- `needs_login`: 需要先在 Mac Chrome 登录抖音，然后重试。
+- `failed` or `needs_user_action`: 采集失败或需要手动打开页面处理。
+
 ## Search
 
 ```bash

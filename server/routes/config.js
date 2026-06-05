@@ -15,7 +15,7 @@ router.get('/', (req, res) => {
         // Decrypt and mask sensitive values
         const result = {};
         for (const [k, v] of Object.entries(all)) {
-            if (k === 'clipper.token') {
+            if (k === 'clipper.token' || k === 'agent.token') {
                 result[k] = maskKey(v);
             } else if (SENSITIVE_KEYS.includes(k)) {
                 result[k] = maskKey(decrypt(v));

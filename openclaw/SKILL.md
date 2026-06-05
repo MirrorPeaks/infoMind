@@ -23,6 +23,27 @@ description: 个人知识管理系统 - 当用户发送链接并说“收录/收
 
 如果用户只是让你总结、阅读、解释某个 URL，但没有表达收藏意图，不要自动保存，除非上下文明显是在让你记录到 InfoMind。
 
+## 抖音手机链接
+
+当 URL 属于 `douyin.com`、`v.douyin.com` 或 `iesdouyin.com` 时，不要优先调用 `/api/entries`。抖音需要用户 Mac Chrome 中已有登录态，由 InfoMind Clipper 插件采集真实内容。
+
+POST http://localhost:3456/api/capture-jobs
+Content-Type: application/json
+
+{
+  "url": "{{用户提供的抖音URL}}",
+  "platform": "douyin",
+  "source_channel": "feishu",
+  "source_message": "{{用户原始可见消息}}"
+}
+
+根据返回状态回复用户：
+
+- `queued` / `opening` / `capturing`：已收到，正在让 Mac 上的 InfoMind Clipper 用浏览器登录态采集。
+- `saved`：已收录。
+- `needs_login`：需要先在 Mac Chrome 登录抖音，然后重试。
+- `failed` / `needs_user_action`：采集失败或需要手动打开页面处理。
+
 POST http://localhost:3456/api/entries
 Content-Type: application/json
 

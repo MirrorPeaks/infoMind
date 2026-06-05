@@ -69,10 +69,16 @@ router.post('/', async (req, res) => {
         url = 'https://' + url;
     }
 
-    // Check duplicate
+    // Check duplicate. Bad Douyin captures should not block a fresh save attempt,
+    // and healthy duplicates should be treated as idempotent success for the UI.
     const existing = queries.getEntryByUrl(url);
     if (existing) {
-        return res.status(409).json({ success: false, error: 'URL already exists', data: existing });
+        if (shouldReplaceExistingEntry(existing)) {
+            logger.warn(`Replacing stale duplicate entry: ${existing.id} ${existing.url}`);
+            queries.deleteEntry(existing.id);
+        } else {
+            return res.status(200).json({ success: true, duplicate: true, message: 'URL already exists', data: existing });
+        }
     }
 
     try {
@@ -83,6 +89,19 @@ router.post('/', async (req, res) => {
         const entryData = { ...parsed, url, note: note || null, tags: tags || [] };
         applyZhihuSharedMetadata(entryData, originalInput, url);
         applyDouyinSharedMetadata(entryData, originalInput, url);
+
+        if (isUnusableDouyinEntryData(entryData)) {
+            const job = upsertDouyinCaptureJob(url, {
+                source_channel: 'manual',
+                source_message: originalInput,
+            });
+            return res.status(202).json({
+                success: true,
+                pending_capture: true,
+                message: '抖音内容已进入浏览器采集队列。InfoMind Clipper 会使用本机 Chrome 登录态补全真实内容。',
+                data: job,
+            });
+        }
 
         // 2. Classify with LLM (or fallback)
         if (!manualCategory) {
@@ -150,6 +169,47 @@ function mergeDouyinSourceData(parsed = {}, shared = {}) {
         ? parsed.content_type
         : (shared.content_type || parsed.content_type || 'unknown');
     return { ...parsed, ...shared, content_type: contentType };
+}
+
+function shouldReplaceExistingEntry(entry) {
+    if (!entry || entry.platform !== 'douyin') return false;
+    const title = String(entry.title || '').trim();
+    const author = String(entry.author || '').trim();
+    const url = String(entry.url || '').trim();
+    const source = entry.source_data || {};
+    if (url === 'https://www.douyin.com/' || /\/jingxuan\?modal_id=/.test(url)) return true;
+    if (!title || title === '抖音内容' || title === 'Douyin') return true;
+    if ((!author || author === '抖音') && !source.description && !source.full_text) return true;
+    if (source.error || (source.parser_error && !source.aweme_id && !source.description)) return true;
+    return false;
+}
+
+function isUnusableDouyinEntryData(entryData) {
+    if (entryData.platform !== 'douyin') return false;
+    const source = entryData.source_data || {};
+    const title = String(entryData.title || '').trim();
+    const hasUsefulTitle = title && !['抖音内容', 'Douyin', '抖音'].includes(title);
+    const hasContent = !!(entryData.description || source.description || source.full_text || source.douyin_shared_text);
+    const hasIdentity = !!(entryData.author && entryData.author !== '抖音');
+    const hasMedia = !!(entryData.cover_url || source.cover_url || source.aweme_id);
+    return !hasUsefulTitle && !hasContent && !hasIdentity && !hasMedia;
+}
+
+function upsertDouyinCaptureJob(url, details = {}) {
+    const active = queries.findActiveCaptureJobByUrl(url);
+    if (active) {
+        if (['failed', 'needs_login', 'needs_user_action'].includes(active.status)) {
+            return queries.updateCaptureJob(active.id, { status: 'queued', error: null });
+        }
+        return active;
+    }
+    return queries.createCaptureJob({
+        url,
+        platform: 'douyin',
+        source_channel: details.source_channel || 'manual',
+        source_message: details.source_message || null,
+        status: 'queued',
+    });
 }
 
 // GET /api/entries/search - Search entries

@@ -4,7 +4,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const logger = require('../utils/logger');
 const queries = require('../db/queries');
-const { parseUrl } = require('../services/parser');
+const { parseUrl, detectPlatform } = require('../services/parser');
 const { deriveZhihuMetadataFromText } = require('../services/parser/zhihu');
 const { deriveDouyinMetadataFromText } = require('../services/parser/douyin');
 const { classifyEntry } = require('../services/classifier');
@@ -48,10 +48,21 @@ router.post('/openclaw', async (req, res) => {
 
     for (const url of urls) {
         try {
+            const platform = detectPlatform(url);
             // Dedup check
             const existing = queries.getEntryByUrl(url);
             if (existing) {
                 results.push({ url, status: 'duplicate', id: existing.id, title: existing.title });
+                continue;
+            }
+
+            if (platform === 'douyin') {
+                const job = upsertCaptureJob(url, {
+                    platform,
+                    source_channel: 'feishu',
+                    source_message: message || '',
+                });
+                results.push({ url, status: 'capture_queued', job_id: job.id, job_status: job.status });
                 continue;
             }
 
@@ -100,6 +111,23 @@ function applyZhihuSharedMetadata(entryData, originalInput, url) {
     if (!entryData.author) entryData.author = shared.author || entryData.author;
     if (!entryData.description) entryData.description = shared.description || entryData.description;
     entryData.source_data = { ...(entryData.source_data || {}), ...(shared.source_data || {}) };
+}
+
+function upsertCaptureJob(url, data) {
+    const active = queries.findActiveCaptureJobByUrl(url);
+    if (active) {
+        if (['failed', 'needs_login', 'needs_user_action'].includes(active.status)) {
+            return queries.updateCaptureJob(active.id, { status: 'queued', error: null });
+        }
+        return active;
+    }
+    return queries.createCaptureJob({
+        url,
+        platform: data.platform || detectPlatform(url),
+        source_channel: data.source_channel || 'webhook',
+        source_message: data.source_message || null,
+        status: 'queued',
+    });
 }
 
 function applyDouyinSharedMetadata(entryData, originalInput, url) {

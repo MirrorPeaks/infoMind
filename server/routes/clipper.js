@@ -37,13 +37,18 @@ router.get('/pairing', (req, res) => {
 });
 
 router.post('/captures', requireClipperToken, async (req, res) => {
+    const jobId = req.body?.job_id || null;
     try {
         const payload = normalizeCapturePayload(req.body || {});
         if (!payload.url) return res.status(400).json({ success: false, error: 'url is required' });
+        const job = jobId ? queries.getCaptureJobById(jobId) : null;
+        if (jobId && !job) return res.status(404).json({ success: false, error: 'Capture job not found' });
+        if (job) queries.updateCaptureJob(job.id, { status: 'capturing', error: null });
 
-        const existing = queries.getEntryByUrl(payload.url);
+        const existing = queries.getEntryByUrl(payload.url) || (job?.url ? queries.getEntryByUrl(job.url) : null);
         if (existing) {
             const updated = mergeCaptureIntoEntry(existing, payload);
+            if (job) queries.updateCaptureJob(job.id, { status: 'saved', entry_id: updated.id, error: null, finish_now: true });
             return res.json({ success: true, data: updated, duplicate: true });
         }
 
@@ -73,8 +78,14 @@ router.post('/captures', requireClipperToken, async (req, res) => {
         }
 
         const entry = queries.createEntry(entryData);
+        if (job) queries.updateCaptureJob(job.id, { status: 'saved', entry_id: entry.id, error: null, finish_now: true });
         res.status(201).json({ success: true, data: entry });
     } catch (err) {
+        if (jobId) {
+            try {
+                queries.updateCaptureJob(jobId, { status: 'failed', error: err.message, finish_now: true });
+            } catch {}
+        }
         logger.error('Clipper capture failed', err);
         res.status(500).json({ success: false, error: err.message });
     }
@@ -124,6 +135,8 @@ function normalizeCapturePayload(raw) {
     const contentType = normalizeContentType(raw.content_type, platform, media);
 
     return {
+        job_id: raw.job_id || null,
+        original_url: cleanUrl(raw.original_url) || cleanUrl(raw.requested_url) || null,
         url,
         canonical_url: cleanUrl(raw.canonical_url) || url,
         platform,
@@ -163,6 +176,7 @@ function buildEntryData(payload) {
             content_source: 'browser-extension',
             content_type: payload.content_type,
             canonical_url: payload.canonical_url,
+            original_url: payload.original_url,
             full_text: payload.full_text || null,
             subtitle_text: payload.subtitle_text || null,
             transcript: payload.subtitle_text || null,
@@ -182,6 +196,7 @@ function mergeCaptureIntoEntry(entry, payload) {
         content_source: 'browser-extension',
         content_type: payload.content_type,
         canonical_url: payload.canonical_url || entry.source_data?.canonical_url,
+        original_url: payload.original_url || entry.source_data?.original_url,
         full_text: payload.full_text || entry.source_data?.full_text || null,
         subtitle_text: payload.subtitle_text || entry.source_data?.subtitle_text || null,
         transcript: payload.subtitle_text || entry.source_data?.transcript || null,
@@ -193,6 +208,8 @@ function mergeCaptureIntoEntry(entry, payload) {
     };
     const updates = {
         title: isWeakTitle(entry.title, entry.url) && payload.title ? payload.title : entry.title,
+        author: (!entry.author || isWeakAuthor(entry.author, entry.platform)) && payload.author ? payload.author : entry.author,
+        cover_url: entry.cover_url || payload.cover_url || null,
         summary: entry.summary || payload.description || summarizeText(payload.full_text || payload.subtitle_text),
         source_data: sourceData,
     };
@@ -233,6 +250,11 @@ function summarizeText(text) {
 function isWeakTitle(title, url) {
     const value = String(title || '').trim();
     return !value || value === url || /^https?:\/\//i.test(value) || ['抖音内容', '网页内容', 'Untitled'].includes(value);
+}
+
+function isWeakAuthor(author, platform) {
+    const value = String(author || '').trim();
+    return !value || value === platformDisplayName(platform) || value === '抖音';
 }
 
 function cleanUrl(value) {

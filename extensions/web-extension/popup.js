@@ -10,6 +10,7 @@ const baseUrlInput = document.getElementById('baseUrl');
 const tokenInput = document.getElementById('token');
 const saveBtn = document.getElementById('saveBtn');
 const statusEl = document.getElementById('status');
+const jobStatusEl = document.getElementById('jobStatus');
 
 init();
 
@@ -20,6 +21,7 @@ async function init() {
   saveBtn.addEventListener('click', saveCurrentTab);
   baseUrlInput.addEventListener('change', persistSettings);
   tokenInput.addEventListener('change', persistSettings);
+  refreshJobStatus();
 }
 
 async function saveCurrentTab() {
@@ -92,6 +94,7 @@ async function persistSettings() {
     baseUrl: normalizeBaseUrl(baseUrlInput.value || DEFAULT_BASE_URL),
     token: tokenInput.value.trim(),
   });
+  refreshJobStatus();
 }
 
 function normalizeBaseUrl(value) {
@@ -101,4 +104,28 @@ function normalizeBaseUrl(value) {
 function setStatus(text, type) {
   statusEl.textContent = text;
   statusEl.className = `status ${type || ''}`.trim();
+}
+
+async function refreshJobStatus() {
+  if (!jobStatusEl) return;
+  const baseUrl = normalizeBaseUrl(baseUrlInput.value || DEFAULT_BASE_URL);
+  const token = tokenInput.value.trim();
+  if (!token) {
+    jobStatusEl.textContent = '完成配对后，插件会自动处理手机/Agent 发来的抖音任务。';
+    return;
+  }
+  try {
+    const response = await fetch(`${baseUrl}/api/capture-jobs/pending?platform=douyin&limit=10`, {
+      headers: { 'X-InfoMind-Clipper-Token': token },
+    });
+    const json = await response.json();
+    if (!response.ok || !json.success) throw new Error(json.error || '无法读取任务');
+    jobStatusEl.textContent = json.total
+      ? `待处理抖音任务：${json.total} 条，插件会在后台自动采集。`
+      : '当前没有待处理抖音任务。';
+    jobStatusEl.className = 'status muted';
+  } catch (err) {
+    jobStatusEl.textContent = `任务队列未连接：${err.message}`;
+    jobStatusEl.className = 'status error';
+  }
 }

@@ -36,6 +36,7 @@ function createApp() {
     app.use('/api/config', require('./routes/config'));
     app.use('/api/webhook', require('./routes/webhook'));
     app.use('/api/clipper', require('./routes/clipper'));
+    app.use('/api/capture-jobs', require('./routes/captureJobs'));
 
     app.use('/api/stats', require('./routes/stats'));
 

@@ -238,15 +238,25 @@ function renderTimeline(entries, container) {
             }
 
             item.innerHTML = markerHTML + contentHTML;
-            item.querySelector('.timeline-entry-card')?.addEventListener('click', () => {
-                if (entry.book_id) window.openBookModal(entry.book_id, { fallbackEntry: entry });
-                else window.openEntryModal(entry);
-            });
+            item.querySelector('.timeline-entry-card')?.addEventListener('click', () => openTimelineEntry(entry));
             rowContainer.appendChild(item);
         });
     });
 
-    rowContainer.innerHTML += `<div class="flex justify-center md:justify-center justify-start ml-2 md:ml-0 relative -top-8"><div class="w-2 h-2 rounded-full bg-outline-variant/30"></div></div>`;
+    const endMarker = document.createElement('div');
+    endMarker.className = 'flex justify-center md:justify-center justify-start ml-2 md:ml-0 relative -top-8';
+    endMarker.innerHTML = '<div class="w-2 h-2 rounded-full bg-outline-variant/30"></div>';
+    rowContainer.appendChild(endMarker);
+}
+
+function openTimelineEntry(entry) {
+    if (!entry) return;
+    if (!entry.book_id) {
+        window.openEntryModal(entry);
+        return;
+    }
+
+    window.openBookModal(entry.book_id, { fallbackEntry: entry });
 }
 
 function renderSearchResults(entries, query, container) {

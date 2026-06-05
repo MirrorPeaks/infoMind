@@ -62,6 +62,12 @@ class ApiClient {
     // Browser Clipper
     getClipperPairing() { return this.get('/api/clipper/pairing'); }
     getClipperHello() { return this.get('/api/clipper/hello'); }
+    getCaptureJobSummary() { return this.get('/api/capture-jobs/summary'); }
+    listCaptureJobs(params = {}) {
+        const q = new URLSearchParams(params).toString();
+        return this.get(`/api/capture-jobs${q ? '?' + q : ''}`);
+    }
+    deleteCaptureJob(id) { return this.del(`/api/capture-jobs/${id}`); }
 }
 
 window.api = new ApiClient();

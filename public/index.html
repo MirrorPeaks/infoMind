@@ -361,10 +361,16 @@ tailwind.config = {
                         <div>
                             <p class="font-label text-sm font-semibold text-on-surface">InfoMind Clipper</p>
                             <p class="mt-2 text-xs leading-relaxed text-on-surface-variant">用于抖音、小红书、知乎、B站、YouTube 和网页文章。插件在你已登录的浏览器里读取当前页面内容，不读取、不保存 cookie。</p>
-                            <a href="/clipper-setup.html" target="_blank" class="mt-4 inline-flex items-center gap-2 rounded-full bg-primary text-on-primary px-4 py-2 font-label text-sm hover:bg-primary-container transition-colors">
-                                <span class="material-symbols-outlined text-[18px]">open_in_new</span>
-                                查看图文配置指南
-                            </a>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <a href="/downloads/infomind-clipper-chromium.zip" download class="inline-flex items-center gap-2 rounded-full bg-primary text-on-primary px-4 py-2 font-label text-sm hover:bg-primary-container transition-colors">
+                                    <span class="material-symbols-outlined text-[18px]">download</span>
+                                    下载插件
+                                </a>
+                                <a href="/clipper-setup.html" target="_blank" class="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest border border-outline-variant/20 text-on-surface px-4 py-2 font-label text-sm hover:border-primary/40 transition-colors">
+                                    <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                                    图文配置指南
+                                </a>
+                            </div>
                         </div>
                         <span id="clipperStatus" class="text-xs text-on-surface-variant whitespace-nowrap">尚未检查</span>
                     </div>
@@ -384,13 +390,26 @@ tailwind.config = {
                         <a href="/clipper-setup.html#install" target="_blank" class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 hover:border-primary/40 transition-colors">
                             <span class="material-symbols-outlined text-[20px] text-primary">language</span>
                             <span class="block mt-2 font-label text-sm text-on-surface">Chrome / Edge / Arc</span>
-                            <span class="block mt-1 text-xs text-on-surface-variant">查看带图示的安装、配对和收录步骤。</span>
+                            <span class="block mt-1 text-xs text-on-surface-variant">先下载插件 ZIP，解压后加载到 Chromium 浏览器。</span>
                         </a>
                         <a href="/clipper-setup.html#install" target="_blank" class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 hover:border-primary/40 transition-colors">
                             <span class="material-symbols-outlined text-[20px] text-primary">desktop_mac</span>
                             <span class="block mt-2 font-label text-sm text-on-surface">Safari</span>
                             <span class="block mt-1 text-xs text-on-surface-variant">查看 Safari 当前状态和后续签名分发说明。</span>
                         </a>
+                    </div>
+                    <div class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-label text-sm font-semibold text-on-surface">手机/Agent 采集队列</p>
+                                <p id="captureJobSummary" class="mt-1 text-xs text-on-surface-variant">尚未检查</p>
+                            </div>
+                            <button id="refreshCaptureJobsBtn" type="button" class="inline-flex items-center gap-1 text-primary hover:underline font-label text-sm">
+                                <span class="material-symbols-outlined text-[16px]">refresh</span>
+                                刷新
+                            </button>
+                        </div>
+                        <div id="captureJobList" class="mt-3 space-y-2"></div>
                     </div>
                 </div>
             </section>
@@ -442,12 +461,12 @@ tailwind.config = {
 
 <div id="toastContainer" class="toast-container"></div>
 
-<script src="/js/api.js?v=20260429-dashboard-layout"></script>
-<script src="/js/bookshelf.js?v=20260429-dashboard-layout"></script>
-<script src="/js/modal.js?v=20260429-dashboard-layout"></script>
-<script src="/js/settings.js?v=20260429-dashboard-layout"></script>
+<script src="/js/api.js?v=20260602-capture-jobs"></script>
+<script src="/js/bookshelf.js?v=20260602-capture-jobs"></script>
+<script src="/js/modal.js?v=20260602-capture-jobs"></script>
+<script src="/js/settings.js?v=20260602-capture-jobs"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
-<script src="/js/app.js?v=20260429-dashboard-layout"></script>
+<script src="/js/app.js?v=20260602-capture-jobs"></script>
 
 <script>
     // Polyfill icon toggling for setting page
