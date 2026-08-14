@@ -9,6 +9,8 @@ const { deriveZhihuMetadataFromText } = require('../services/parser/zhihu');
 const { deriveDouyinMetadataFromText } = require('../services/parser/douyin');
 const { classifyEntry } = require('../services/classifier');
 const { processBook } = require('../services/bookmaker');
+const { assessParsedEntry, shouldQueueBrowserCapture, supportsBrowserCapture } = require('../services/platformPolicy');
+const { upsertCaptureJob } = require('../services/captureJobService');
 
 // Extract URLs from a text string
 function extractUrls(text) {
@@ -52,24 +54,35 @@ router.post('/openclaw', async (req, res) => {
             // Dedup check
             const existing = queries.getEntryByUrl(url);
             if (existing) {
-                results.push({ url, status: 'duplicate', id: existing.id, title: existing.title });
-                continue;
-            }
-
-            if (platform === 'douyin') {
-                const job = upsertCaptureJob(url, {
-                    platform,
-                    source_channel: 'feishu',
-                    source_message: message || '',
-                });
-                results.push({ url, status: 'capture_queued', job_id: job.id, job_status: job.status });
-                continue;
+                if (supportsBrowserCapture(existing.platform) && shouldQueueBrowserCapture(existing, url)) {
+                    queries.deleteEntry(existing.id);
+                } else {
+                    results.push({ url, status: 'duplicate', id: existing.id, title: existing.title });
+                    continue;
+                }
             }
 
             const parsed = await parseUrl(url);
             const entryData = { ...parsed, url };
             applyZhihuSharedMetadata(entryData, message || '', url);
             applyDouyinSharedMetadata(entryData, message || '', url);
+
+            if (shouldQueueBrowserCapture(entryData, url)) {
+                const assessment = assessParsedEntry(entryData, url);
+                const job = upsertCaptureJob(queries, url, {
+                    platform,
+                    source_channel: 'feishu',
+                    source_message: message || '',
+                });
+                results.push({
+                    url,
+                    status: 'capture_queued',
+                    job_id: job.id,
+                    job_status: job.status,
+                    reason: assessment.reason,
+                });
+                continue;
+            }
 
             try {
                 const classification = await classifyEntry(entryData);
@@ -111,23 +124,6 @@ function applyZhihuSharedMetadata(entryData, originalInput, url) {
     if (!entryData.author) entryData.author = shared.author || entryData.author;
     if (!entryData.description) entryData.description = shared.description || entryData.description;
     entryData.source_data = { ...(entryData.source_data || {}), ...(shared.source_data || {}) };
-}
-
-function upsertCaptureJob(url, data) {
-    const active = queries.findActiveCaptureJobByUrl(url);
-    if (active) {
-        if (['failed', 'needs_login', 'needs_user_action'].includes(active.status)) {
-            return queries.updateCaptureJob(active.id, { status: 'queued', error: null });
-        }
-        return active;
-    }
-    return queries.createCaptureJob({
-        url,
-        platform: data.platform || detectPlatform(url),
-        source_channel: data.source_channel || 'webhook',
-        source_message: data.source_message || null,
-        status: 'queued',
-    });
 }
 
 function applyDouyinSharedMetadata(entryData, originalInput, url) {

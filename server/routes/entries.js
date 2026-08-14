@@ -14,6 +14,8 @@ const { classifyEntry } = require('../services/classifier');
 const { processBook } = require('../services/bookmaker');
 const { getEntryAnalysis, startEntryAnalysis } = require('../services/analyzer');
 const { getCoversDir } = require('../utils/paths');
+const { assessParsedEntry, shouldQueueBrowserCapture, supportsBrowserCapture } = require('../services/platformPolicy');
+const { upsertCaptureJob } = require('../services/captureJobService');
 
 async function downloadCover(coverUrl, sourceUrl) {
     if (!coverUrl) return null;
@@ -90,15 +92,18 @@ router.post('/', async (req, res) => {
         applyZhihuSharedMetadata(entryData, originalInput, url);
         applyDouyinSharedMetadata(entryData, originalInput, url);
 
-        if (isUnusableDouyinEntryData(entryData)) {
-            const job = upsertDouyinCaptureJob(url, {
+        if (shouldQueueBrowserCapture(entryData, url)) {
+            const assessment = assessParsedEntry(entryData, url);
+            const job = upsertCaptureJob(queries, url, {
+                platform: entryData.platform,
                 source_channel: 'manual',
                 source_message: originalInput,
             });
             return res.status(202).json({
                 success: true,
                 pending_capture: true,
-                message: '抖音内容已进入浏览器采集队列。InfoMind Clipper 会使用本机 Chrome 登录态补全真实内容。',
+                message: '当前平台没有返回足够正文，已转交 InfoMind Clipper 使用本机浏览器登录态补全。',
+                capture_reason: assessment.reason,
                 data: job,
             });
         }
@@ -172,44 +177,7 @@ function mergeDouyinSourceData(parsed = {}, shared = {}) {
 }
 
 function shouldReplaceExistingEntry(entry) {
-    if (!entry || entry.platform !== 'douyin') return false;
-    const title = String(entry.title || '').trim();
-    const author = String(entry.author || '').trim();
-    const url = String(entry.url || '').trim();
-    const source = entry.source_data || {};
-    if (url === 'https://www.douyin.com/' || /\/jingxuan\?modal_id=/.test(url)) return true;
-    if (!title || title === '抖音内容' || title === 'Douyin') return true;
-    if ((!author || author === '抖音') && !source.description && !source.full_text) return true;
-    if (source.error || (source.parser_error && !source.aweme_id && !source.description)) return true;
-    return false;
-}
-
-function isUnusableDouyinEntryData(entryData) {
-    if (entryData.platform !== 'douyin') return false;
-    const source = entryData.source_data || {};
-    const title = String(entryData.title || '').trim();
-    const hasUsefulTitle = title && !['抖音内容', 'Douyin', '抖音'].includes(title);
-    const hasContent = !!(entryData.description || source.description || source.full_text || source.douyin_shared_text);
-    const hasIdentity = !!(entryData.author && entryData.author !== '抖音');
-    const hasMedia = !!(entryData.cover_url || source.cover_url || source.aweme_id);
-    return !hasUsefulTitle && !hasContent && !hasIdentity && !hasMedia;
-}
-
-function upsertDouyinCaptureJob(url, details = {}) {
-    const active = queries.findActiveCaptureJobByUrl(url);
-    if (active) {
-        if (['failed', 'needs_login', 'needs_user_action'].includes(active.status)) {
-            return queries.updateCaptureJob(active.id, { status: 'queued', error: null });
-        }
-        return active;
-    }
-    return queries.createCaptureJob({
-        url,
-        platform: 'douyin',
-        source_channel: details.source_channel || 'manual',
-        source_message: details.source_message || null,
-        status: 'queued',
-    });
+    return !!entry && supportsBrowserCapture(entry.platform) && shouldQueueBrowserCapture(entry, entry.url);
 }
 
 // GET /api/entries/search - Search entries
@@ -245,7 +213,8 @@ router.get('/', (req, res) => {
 router.get('/:id/analysis', (req, res) => {
     const entry = queries.getEntryById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, error: 'Entry not found' });
-    const analysis = getEntryAnalysis(req.params.id);
+    res.set('Cache-Control', 'no-store');
+    const analysis = getEntryAnalysis(req.params.id, { autoRecover: true });
     res.json({ success: true, data: analysis });
 });
 

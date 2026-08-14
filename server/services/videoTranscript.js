@@ -5,7 +5,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { chat } = require('./llm');
+const { chatWithRetry } = require('./llm');
+const { resolveYtDlpCommand } = require('./ytDlpManager');
 const queries = require('../db/queries');
 const { getModelsDir } = require('../utils/paths');
 
@@ -20,14 +21,26 @@ function isVideoPlatform(platform) {
 function isVideoEntry(entryOrPlatform) {
     if (!entryOrPlatform || typeof entryOrPlatform === 'string') return isVideoPlatform(entryOrPlatform);
     const platform = entryOrPlatform.platform;
-    if (platform === 'bilibili' || platform === 'youtube') return true;
-    if (platform !== 'douyin') return false;
-
     const source = entryOrPlatform.source_data || {};
     const type = String(source.content_type || '').toLowerCase();
-    if (['note', 'image', 'images', 'photo', 'photos', '图文'].includes(type)) return false;
-    if (['video', 'aweme_video'].includes(type)) return true;
-    if (source.video_url || source.videoUrl || source.play_addr || source.playAddr) return true;
+    const imageTypes = ['note', 'image', 'images', 'photo', 'photos', '图文'];
+    const videoTypes = ['video', 'aweme_video', 'tweet_video', 'x_video'];
+    const hasDirectVideo = !!(
+        source.video_url || source.videoUrl || source.media_url || source.mediaUrl
+        || source.play_addr || source.playAddr
+        || (Array.isArray(source.media) && source.media.some(item => (
+            String(item?.type || '').toLowerCase().includes('video')
+            || /\.m3u8(?:\?|$)|\.mp4(?:\?|$)/i.test(String(item?.url || ''))
+        )))
+    );
+    if (platform === 'bilibili' || platform === 'youtube') return true;
+    if (platform === 'xiaoyuzhou') {
+        return !!(source.audioUrl || source.audio_url || source.audioURL || source.media_url || source.mediaUrl || /\/episode\//i.test(entryOrPlatform.url || ''));
+    }
+    if (imageTypes.includes(type)) return false;
+    if (videoTypes.includes(type) || hasDirectVideo) return true;
+    if (platform !== 'douyin') return false;
+
     const url = `${entryOrPlatform.url || ''} ${source.final_url || ''}`.toLowerCase();
     if (/\/note\//i.test(url)) return false;
     if (/\/video\//i.test(url)) return true;
@@ -163,7 +176,8 @@ function parseYoutubeCaptionResponse(payload) {
 }
 
 async function transcribeEntryAudio(entry, progress = async () => {}) {
-    const setup = await getTranscriptionSetupStatus();
+    const directVideoUrl = getDirectVideoUrl(entry);
+    const setup = await getTranscriptionSetupStatus({ requireYtDlp: !directVideoUrl });
     const { ytDlp, ffmpeg, whisper, modelPath, language, maxDuration } = setup;
 
     if (!setup.ready) {
@@ -180,23 +194,24 @@ async function transcribeEntryAudio(entry, progress = async () => {}) {
     const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'infomind-stt-'));
     try {
         const mediaUrl = getTranscriptMediaUrl(entry);
-        const directVideoUrl = getDirectVideoUrl(entry);
         const knownDuration = getKnownDuration(entry);
         let meta = null;
-        try {
-            meta = await runJson(ytDlp, [
-                ...getYtDlpRequestArgs(entry),
-                '--dump-json',
-                '--no-playlist',
-                mediaUrl,
-            ], { timeout: 45000 });
-        } catch (err) {
-            if (!directVideoUrl) {
-                return {
-                    ok: false,
-                    reason: buildVideoDownloadReason(entry, err),
-                    setup_action: 'manual_transcript',
-                };
+        if (ytDlp) {
+            try {
+                meta = await runJson(ytDlp, [
+                    ...getYtDlpRequestArgs(entry),
+                    '--dump-json',
+                    '--no-playlist',
+                    mediaUrl,
+                ], { timeout: 45000 });
+            } catch (err) {
+                if (!directVideoUrl) {
+                    return {
+                        ok: false,
+                        reason: buildVideoDownloadReason(entry, err),
+                        setup_action: 'manual_transcript',
+                    };
+                }
             }
         }
 
@@ -207,9 +222,15 @@ async function transcribeEntryAudio(entry, progress = async () => {}) {
 
         const wavPath = path.join(workDir, 'audio.wav');
         let downloaded = null;
-        try {
-            downloaded = await downloadAudioWithYtDlp(entry, ytDlp, mediaUrl, workDir);
-        } catch (downloadErr) {
+        let downloadErr = null;
+        if (ytDlp) {
+            try {
+                downloaded = await downloadAudioWithYtDlp(entry, ytDlp, mediaUrl, workDir);
+            } catch (err) {
+                downloadErr = err;
+            }
+        }
+        if (!downloaded) {
             if (!directVideoUrl) {
                 return {
                     ok: false,
@@ -283,6 +304,9 @@ function getTranscriptMediaUrl(entry) {
     if (entry.platform === 'douyin') {
         return source.final_url || entry.url;
     }
+    if (entry.platform === 'xiaoyuzhou') {
+        return source.audioUrl || source.audio_url || source.audioURL || entry.url;
+    }
     return entry.url;
 }
 
@@ -291,10 +315,16 @@ function getDirectVideoUrl(entry) {
     const candidates = [
         source.video_url,
         source.videoUrl,
+        source.media_url,
+        source.mediaUrl,
+        source.audioUrl,
+        source.audio_url,
+        source.audioURL,
         source.play_addr,
         source.playAddr,
         source.download_url,
         source.downloadUrl,
+        ...(Array.isArray(source.media) ? source.media.map(item => item?.url) : []),
     ];
     return candidates.find(value => typeof value === 'string' && /^https?:\/\//i.test(value)) || null;
 }
@@ -302,17 +332,32 @@ function getDirectVideoUrl(entry) {
 function getKnownDuration(entry) {
     const source = entry.source_data || {};
     const value = source.duration || source.duration_seconds || source.durationSeconds || source.video_duration || source.videoDuration;
+    const isoDuration = parseIsoDuration(value);
+    if (isoDuration) return isoDuration;
     const number = Number(value);
     if (!Number.isFinite(number) || number <= 0) return null;
     return number > 10000 ? Math.round(number / 1000) : Math.round(number);
 }
 
 function getYtDlpRequestArgs(entry) {
+    const runtime = getYtDlpJavaScriptRuntime();
     return [
         '--user-agent', USER_AGENT,
         '--referer', getPlatformReferer(entry),
         '--add-header', 'Accept-Language:zh-CN,zh;q=0.9,en;q=0.8',
+        ...(runtime ? ['--js-runtimes', runtime] : []),
     ];
+}
+
+function getYtDlpJavaScriptRuntime({
+    execPath = process.execPath,
+    versions = process.versions,
+    configured = process.env.INFOMIND_YTDLP_JS_RUNTIME || '',
+} = {}) {
+    const explicit = String(configured || '').trim();
+    if (explicit) return explicit;
+    if (versions?.node && execPath) return `node:${execPath}`;
+    return null;
 }
 
 function buildFfmpegHeaders(entry) {
@@ -328,6 +373,8 @@ function getPlatformReferer(entry) {
     if (entry.platform === 'bilibili') return 'https://www.bilibili.com/';
     if (entry.platform === 'youtube') return 'https://www.youtube.com/';
     if (entry.platform === 'douyin') return 'https://www.douyin.com/';
+    if (entry.platform === 'twitter') return 'https://x.com/';
+    if (entry.platform === 'xiaoyuzhou') return 'https://www.xiaoyuzhoufm.com/';
     try {
         return new URL(entry.url).origin + '/';
     } catch {
@@ -340,6 +387,12 @@ function buildVideoDownloadReason(entry, err) {
     if (entry.platform === 'douyin') {
         return `抖音视频无法自动下载音频。可能是短链过期、视频权限限制或平台阻止后端直连。请先用已登录浏览器里的 InfoMind Clipper 收录字幕/正文；仍不足时再使用本地转写或 Agent 增强。${detail ? ` 细节：${detail}` : ''}`;
     }
+    if (entry.platform === 'twitter') {
+        return `X/Twitter 视频无法自动下载音频。可能是视频权限、登录态或平台限制导致。请用 InfoMind Clipper 收录可见字幕/正文，或让 Agent 在浏览器中提取转写后回写。${detail ? ` 细节：${detail}` : ''}`;
+    }
+    if (entry.platform === 'xiaoyuzhou') {
+        return `小宇宙音频无法自动转写。可能是音频链接过期、网络限制或本地转写组件异常。请重新收录或运行 npm run setup:stt 后重试。${detail ? ` 细节：${detail}` : ''}`;
+    }
     return `无法自动下载视频音频。${detail ? `细节：${detail}` : ''}`;
 }
 
@@ -347,26 +400,50 @@ function getNonVideoReason(entry) {
     if (entry?.platform === 'douyin') {
         return '当前抖音条目被识别为图文内容，不会进入音频转写。请在已登录浏览器里使用 InfoMind Clipper 重新收录图文正文和图片。';
     }
+    if (entry?.platform === 'twitter') {
+        return '当前 X/Twitter 条目未识别到视频媒体，不会进入音频转写。请用 InfoMind Clipper 重新收录帖子正文、字幕或媒体信息。';
+    }
+    if (entry?.platform === 'xiaoyuzhou') {
+        return '当前小宇宙条目未识别到可转写音频地址。请重新收录节目链接，确保解析到 audioUrl。';
+    }
     return '当前条目不是视频平台内容。';
 }
 
-async function getTranscriptionSetupStatus() {
-    const ytDlp = await findCommand([
+function parseIsoDuration(value) {
+    const match = String(value || '').match(/^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+    if (!match) return null;
+    const days = Number(match[1] || 0);
+    const hours = Number(match[2] || 0);
+    const minutes = Number(match[3] || 0);
+    const seconds = Number(match[4] || 0);
+    const total = days * 86400 + hours * 3600 + minutes * 60 + seconds;
+    return total > 0 ? total : null;
+}
+
+async function getTranscriptionSetupStatus({ requireYtDlp = true } = {}) {
+    const fallbackYtDlp = await findCommand([
         'yt-dlp',
         path.join(os.homedir(), 'Library/Python/3.9/bin/yt-dlp'),
         path.join(os.homedir(), 'Library/Python/3.10/bin/yt-dlp'),
         path.join(os.homedir(), 'Library/Python/3.11/bin/yt-dlp'),
         path.join(os.homedir(), 'Library/Python/3.12/bin/yt-dlp'),
     ]);
+    const ytDlp = requireYtDlp
+        ? await resolveYtDlpCommand({ fallbackCommand: fallbackYtDlp })
+        : fallbackYtDlp;
     const ffmpeg = await findCommand(['ffmpeg', '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg']);
     const whisper = await findCommand(['whisper-cli', '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli', 'main', 'whisper']);
     const modelPath = process.env.INFOMIND_STT_MODEL_PATH || path.join(getModelsDir(), 'ggml-base.bin');
     const maxDuration = Number(process.env.INFOMIND_STT_MAX_DURATION || 7200);
     const language = process.env.INFOMIND_STT_LANGUAGE || 'auto';
-    const missingTools = [];
-    if (!ytDlp) missingTools.push('yt-dlp');
-    if (!ffmpeg) missingTools.push('ffmpeg');
-    if (!whisper) missingTools.push('whisper.cpp');
+    const modelExists = fs.existsSync(modelPath);
+    const missingTools = getMissingTranscriptionTools({
+        ytDlp,
+        ffmpeg,
+        whisper,
+        modelExists,
+        requireYtDlp,
+    });
 
     if (missingTools.length) {
         return {
@@ -381,20 +458,16 @@ async function getTranscriptionSetupStatus() {
             language,
         };
     }
-    if (!fs.existsSync(modelPath)) {
-        return {
-            ready: false,
-            reason: `缺少 Whisper 模型文件：${modelPath}。请先在项目目录运行 npm run setup:stt 下载默认模型，然后重新生成解读。`,
-            missingTools: ['ggml-base.bin'],
-            ytDlp,
-            ffmpeg,
-            whisper,
-            modelPath,
-            maxDuration,
-            language,
-        };
-    }
     return { ready: true, missingTools, ytDlp, ffmpeg, whisper, modelPath, maxDuration, language };
+}
+
+function getMissingTranscriptionTools({ ytDlp, ffmpeg, whisper, modelExists, requireYtDlp = true }) {
+    const missingTools = [];
+    if (requireYtDlp && !ytDlp) missingTools.push('yt-dlp');
+    if (!ffmpeg) missingTools.push('ffmpeg');
+    if (!whisper) missingTools.push('whisper.cpp');
+    if (!modelExists) missingTools.push('ggml-base.bin');
+    return missingTools;
 }
 
 async function cleanTranscriptWithLlm(text, entry) {
@@ -412,7 +485,7 @@ async function cleanTranscriptWithLlm(text, entry) {
 ${chunks[index]}
 
 请只返回修正后的正文，不要解释。`;
-        const repaired = await chat([{ role: 'user', content: prompt }], { temperature: 0.1, maxTokens: 2200, timeout: 90000 });
+        const repaired = await chatWithRetry([{ role: 'user', content: prompt }], { temperature: 0.1, maxTokens: 2200, timeout: 90000, thinking: false });
         cleaned.push(repaired.trim() || chunks[index]);
     }
     return normalizeTranscript(cleaned.join('\n\n'));
@@ -494,7 +567,10 @@ async function runJson(command, args, options) {
 
 function run(command, args, { timeout = 30000, allowFailure = false } = {}) {
     return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        const env = process.versions?.electron
+            ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+            : process.env;
+        const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
         let stdout = '';
         let stderr = '';
         const timer = setTimeout(() => {
@@ -524,6 +600,8 @@ module.exports = {
     transcribeEntryAudio,
     cleanTranscriptWithLlm,
     getTranscriptionSetupStatus,
+    getMissingTranscriptionTools,
+    getYtDlpJavaScriptRuntime,
     isVideoPlatform,
     isVideoEntry,
 };

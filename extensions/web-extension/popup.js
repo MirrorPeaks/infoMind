@@ -111,18 +111,18 @@ async function refreshJobStatus() {
   const baseUrl = normalizeBaseUrl(baseUrlInput.value || DEFAULT_BASE_URL);
   const token = tokenInput.value.trim();
   if (!token) {
-    jobStatusEl.textContent = '完成配对后，插件会自动处理手机/Agent 发来的抖音任务。';
+    jobStatusEl.textContent = '完成配对后，插件会自动处理手机或 Agent 发来的受限平台采集任务。';
     return;
   }
   try {
-    const response = await fetch(`${baseUrl}/api/capture-jobs/pending?platform=douyin&limit=10`, {
+    const response = await fetch(`${baseUrl}/api/capture-jobs/pending?limit=10`, {
       headers: { 'X-InfoMind-Clipper-Token': token },
     });
     const json = await response.json();
     if (!response.ok || !json.success) throw new Error(json.error || '无法读取任务');
     jobStatusEl.textContent = json.total
-      ? `待处理抖音任务：${json.total} 条，插件会在后台自动采集。`
-      : '当前没有待处理抖音任务。';
+      ? `待处理采集任务：${json.total} 条，插件会在后台自动采集。`
+      : '当前没有待处理采集任务。';
     jobStatusEl.className = 'status muted';
   } catch (err) {
     jobStatusEl.textContent = `任务队列未连接：${err.message}`;

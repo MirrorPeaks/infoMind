@@ -1,7 +1,11 @@
 // server/services/parser/youtube.js
 const axios = require('axios');
+const { readSocialUrl } = require('../agentReach');
 
 async function youtubeParse(url) {
+    const agentReach = await readSocialUrl(url, 'youtube');
+    if (agentReach) return agentReach;
+
     // Extract video ID
     const idMatch = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
     const videoId = idMatch ? idMatch[1] : null;

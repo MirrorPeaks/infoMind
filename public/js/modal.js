@@ -50,10 +50,10 @@ function openBookModal(bookId, options = {}) {
     </div>
     <div class="w-full mt-12 space-y-3">
         <a id="bookModalOpenOriginal" href="${escapeHtml(openOriginalHref)}" target="_blank" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 px-6 rounded-lg font-body font-medium transition-colors hover:bg-primary-container ${openOriginalDisabled ? 'pointer-events-none opacity-50' : ''}">
-            <span class="material-symbols-outlined">menu_book</span> Open Original
+            <span class="material-symbols-outlined">open_in_new</span> 打开原文
         </a>
         <button id="bookModalDeleteEntry" type="button" class="w-full flex items-center justify-center gap-2 bg-transparent text-error py-3 px-6 rounded-lg font-body font-medium transition-colors hover:bg-error-container hover:text-on-error-container">
-            <span class="material-symbols-outlined">delete</span> Delete Entry
+            <span class="material-symbols-outlined">delete</span> 删除当前内容
         </button>
     </div>
 </div>
@@ -65,7 +65,7 @@ function openBookModal(bookId, options = {}) {
     </button>
     
     <nav class="flex gap-8 mb-12 border-b border-outline-variant/20 pb-4">
-        <button class="font-body text-primary font-bold border-b-2 border-primary pb-4 -mb-[18px]">AI Summary</button>
+        <button class="font-body text-primary font-bold border-b-2 border-primary pb-4 -mb-[18px]">ARTICLE · 文章档案</button>
     </nav>
     
     <div class="space-y-12 max-w-2xl text-on-surface-variant font-body">
@@ -74,7 +74,7 @@ function openBookModal(bookId, options = {}) {
                 <div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center">
                     <span class="material-symbols-outlined text-on-secondary-container text-sm">auto_awesome</span>
                 </div>
-                <h3 class="font-headline text-2xl text-on-surface tracking-tight">AI Generated Insight</h3>
+                <h3 class="font-headline text-2xl text-on-surface tracking-tight">AI 摘要</h3>
             </div>
             <p id="bookModalInsightText" class="font-body text-lg leading-relaxed text-on-surface-variant break-words">
                 ${escapeHtml(initialEntry?.summary || '').replace(/\n/g, '<br/>')}
@@ -83,7 +83,7 @@ function openBookModal(bookId, options = {}) {
         
         ${entries.length > 0 ? `
         <section class="pt-8 border-t border-outline-variant/20">
-            <h3 class="font-headline text-2xl text-on-surface tracking-tight mb-6">Contained Entries</h3>
+            <h3 class="font-headline text-2xl text-on-surface tracking-tight mb-6">BOOK INDEX · 书籍目录</h3>
             <div class="space-y-4" id="containedEntriesList">
                 ${entries.map((e, i) => `
                 <button type="button" data-entry-index="${i}" class="contained-entry w-full text-left flex items-start gap-4 p-4 rounded-xl border ${i === 0 ? 'active border-primary/40 bg-surface-container-low' : 'border-outline-variant/20 bg-surface-container-lowest'} hover:bg-surface-container-low transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
@@ -103,7 +103,7 @@ function openBookModal(bookId, options = {}) {
                     <div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center">
                         <span class="material-symbols-outlined text-primary text-sm">account_tree</span>
                     </div>
-                    <h3 class="font-headline text-2xl text-on-surface tracking-tight">Article Mind Map</h3>
+                    <h3 class="font-headline text-2xl text-on-surface tracking-tight">ARTICLE MIND MAP · 文章解读</h3>
                 </div>
                 <span id="bookModalMindMapMeta" class="font-label text-xs uppercase tracking-[0.16em] text-on-surface-variant/70">${escapeHtml(getModalPlatformLabel(initialEntry?.platform || book.platform))}</span>
             </div>
@@ -282,54 +282,33 @@ function buildRealAnalysisMindMap(analysis, entry) {
     ].filter(Boolean).slice(0, 4);
 
     return `
-        <div class="rounded-3xl border border-primary/20 bg-[radial-gradient(circle_at_50%_12%,rgba(183,230,153,0.22),transparent_32%),linear-gradient(135deg,rgba(250,249,239,0.96),rgba(241,246,231,0.94))] p-5 md:p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
-            <div class="rounded-3xl border border-primary/20 bg-surface-container-lowest px-5 py-4 text-center shadow-[0_18px_50px_rgba(28,28,22,0.08)] mb-5">
-                <div class="font-label text-[10px] uppercase tracking-[0.2em] text-primary mb-2">Real Content Analysis</div>
-                <div class="font-headline text-xl leading-tight text-on-surface">${escapeHtml(mindMap.root || result.title || entry?.title || '内容解读')}</div>
-                ${result.thesis ? `<p class="mt-3 font-body text-sm text-on-surface-variant leading-relaxed">${escapeHtml(result.thesis)}</p>` : ''}
-                <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
-                    ${chips.map(chip => `<span class="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container text-xs font-label">${escapeHtml(chip)}</span>`).join('')}
-                </div>
-            </div>
-
-            <div class="grid md:grid-cols-2 gap-3">
+        <div class="archive-mindmap">
+            <header class="archive-mindmap-root">
+                <div class="archive-specimen-label">REAL CONTENT ANALYSIS / ${String(nodes.length).padStart(2, '0')} NODES</div>
+                <h4>${escapeHtml(mindMap.root || result.title || entry?.title || '内容解读')}</h4>
+                ${result.thesis ? `<p>${escapeHtml(result.thesis)}</p>` : ''}
+                <div class="archive-mindmap-chips">${chips.map(chip => `<span>${escapeHtml(chip)}</span>`).join('')}</div>
+            </header>
+            <div class="archive-mindmap-nodes">
                 ${nodes.map((node, index) => `
-                    <article class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest/95 p-4 shadow-[0_12px_32px_rgba(28,28,22,0.06)]">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="w-7 h-7 rounded-full ${index % 2 ? 'bg-primary-container text-primary' : 'bg-secondary-container text-on-secondary-container'} inline-flex items-center justify-center shrink-0">
-                                <span class="material-symbols-outlined text-[15px] leading-none">${index % 2 ? 'route' : 'tips_and_updates'}</span>
-                            </span>
-                            <h4 class="font-label text-xs uppercase tracking-[0.14em] text-on-surface-variant">${escapeHtml(node.label || '要点')}</h4>
-                        </div>
-                        ${node.summary ? `<p class="font-body text-sm text-on-surface-variant leading-relaxed mb-3">${escapeHtml(node.summary)}</p>` : ''}
-                        <ul class="space-y-3">
+                    <article style="--node-accent:${['#438b83', '#d16f86', '#df8a45'][index % 3]}">
+                        <span class="archive-node-index">${String(index + 1).padStart(2, '0')}</span>
+                        <h5>${escapeHtml(node.label || '要点')}</h5>
+                        ${node.summary ? `<p>${escapeHtml(node.summary)}</p>` : ''}
+                        <ul>
                             ${(node.children || []).map(child => `
-                                <li class="font-body text-sm leading-snug text-on-surface">
-                                    <div class="flex gap-2">
-                                        <span class="mt-[0.45em] w-1.5 h-1.5 rounded-full bg-primary/70 shrink-0"></span>
-                                        <span>${escapeHtml(child.label || '知识点')}</span>
-                                    </div>
-                                    ${child.detail ? `<p class="pl-3 mt-1 text-on-surface-variant leading-relaxed">${escapeHtml(child.detail)}</p>` : ''}
-                                    ${child.evidence ? `<p class="pl-3 mt-1 text-xs text-on-surface-variant/75 leading-relaxed">证据：${escapeHtml(child.evidence)}</p>` : ''}
+                                <li>
+                                    <strong>${escapeHtml(child.label || '知识点')}</strong>
+                                    ${child.detail ? `<span>${escapeHtml(child.detail)}</span>` : ''}
+                                    ${child.evidence ? `<small>证据：${escapeHtml(child.evidence)}</small>` : ''}
                                 </li>
                             `).join('')}
                         </ul>
                     </article>
                 `).join('')}
             </div>
-
-            ${result.knowledge_points?.length ? `
-            <div class="mt-5 rounded-2xl bg-surface-container-lowest/80 border border-outline-variant/20 p-4">
-                <div class="font-label text-xs uppercase tracking-[0.16em] text-on-surface-variant mb-2">Knowledge Points</div>
-                <div class="flex flex-wrap gap-2">
-                    ${result.knowledge_points.map(point => `<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-label">${escapeHtml(point)}</span>`).join('')}
-                </div>
-            </div>` : ''}
-
-            ${result.limitations?.length ? `
-            <div class="mt-4 font-body text-xs leading-relaxed text-on-surface-variant/75">
-                ${result.limitations.map(item => `<div>限制：${escapeHtml(item)}</div>`).join('')}
-            </div>` : ''}
+            ${result.knowledge_points?.length ? `<footer class="archive-knowledge-points"><span>KNOWLEDGE POINTS</span>${result.knowledge_points.map(point => `<em>${escapeHtml(point)}</em>`).join('')}</footer>` : ''}
+            ${result.limitations?.length ? `<div class="archive-limitations">${result.limitations.map(item => `<span>不确定性：${escapeHtml(item)}</span>`).join('')}</div>` : ''}
         </div>
     `;
 }
@@ -401,19 +380,35 @@ async function updateBookModalAnalysis(entry, book) {
         const res = await api.getEntryAnalysis(entry.id);
         if (seq !== bookModalAnalysisSeq) return;
         renderBookModalAnalysis(res.data, entry, book);
+        const refreshDelay = getAnalysisRefreshDelay(res.data);
         if (res.data?.status === 'processing') {
             trackAnalysisJob(entry, book, res.data);
+        }
+        if (refreshDelay) {
             setTimeout(() => {
                 if (seq === bookModalAnalysisSeq && currentBookModalEntry?.id === entry.id) {
                     updateBookModalAnalysis(entry, book);
                 }
-            }, 1800);
+            }, refreshDelay);
         }
     } catch (err) {
         if (seq !== bookModalAnalysisSeq) return;
         container.innerHTML = buildAnalysisEmptyState(entry);
         bindAnalysisPanelAction(entry, book);
     }
+}
+
+function isRecoverableAnalysisFailure(analysis) {
+    if (analysis?.status !== 'failed') return false;
+    const error = String(analysis.error || '');
+    return /格式不完整|自动修复.*失败|malformed|invalid llm|json|parse/i.test(error)
+        && !/401|403|unauthori[sz]ed|api key|鉴权/i.test(error);
+}
+
+function getAnalysisRefreshDelay(analysis) {
+    if (analysis?.status === 'processing') return 1800;
+    if (isRecoverableAnalysisFailure(analysis)) return 3200;
+    return 0;
 }
 
 function renderBookModalAnalysis(analysis, entry, book) {
@@ -486,6 +481,9 @@ async function refreshAnalysisDockJobs() {
         try {
             const res = await api.getEntryAnalysis(entryId);
             job.analysis = res.data || {};
+            if (currentBookModalEntry?.id === entryId) {
+                renderBookModalAnalysis(job.analysis, currentBookModalEntry, currentBookModalBook || job.book);
+            }
             if (['done', 'failed', 'needs_content'].includes(job.analysis.status)) {
                 job.doneAt ||= now;
                 if (now - job.doneAt > 4500) analysisDockJobs.delete(entryId);
@@ -814,17 +812,28 @@ function closeModal() {
     _closeOverlay(document.getElementById('modalOverlay'));
 }
 
-document.getElementById('modalOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal();
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-        closeModal();
-        _closeOverlay(document.getElementById('settingsOverlay'));
-    }
-});
+if (typeof document !== 'undefined') {
+    document.getElementById('modalOverlay')?.addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeModal();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeModal();
+            _closeOverlay(document.getElementById('settingsOverlay'));
+        }
+    });
+}
 
-window.openBookModal = openBookModal;
-window.openEntryModal = openEntryModal;
-window.closeModal = closeModal;
-window.confirmDeleteEntry = confirmDeleteEntry;
+if (typeof window !== 'undefined') {
+    window.openBookModal = openBookModal;
+    window.openEntryModal = openEntryModal;
+    window.closeModal = closeModal;
+    window.confirmDeleteEntry = confirmDeleteEntry;
+}
+
+if (typeof module !== 'undefined') {
+    module.exports = {
+        getAnalysisRefreshDelay,
+        isRecoverableAnalysisFailure,
+    };
+}

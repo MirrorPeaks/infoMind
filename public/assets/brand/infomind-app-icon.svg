@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">InfoMind app icon</title>
+  <desc id="desc">InfoMind open catalog symbol on a warm paper tile.</desc>
+  <defs>
+    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#181713" flood-opacity=".14"/>
+    </filter>
+  </defs>
+  <rect x="72" y="64" width="880" height="880" rx="206" fill="#F7F4EC" filter="url(#tileShadow)"/>
+  <rect x="73" y="65" width="878" height="878" rx="205" fill="none" stroke="#DEDAD0" stroke-width="2"/>
+  <g fill="none" stroke="#151513" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M760 364V264H264V760H760V660" stroke-width="64"/>
+  </g>
+  <g fill="#151513">
+    <rect x="364" y="416" width="108" height="44"/>
+    <rect x="364" y="490" width="108" height="44"/>
+    <rect x="364" y="564" width="108" height="44"/>
+  </g>
+  <circle cx="744" cy="512" r="54" fill="#D06F84"/>
+</svg>

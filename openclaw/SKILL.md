@@ -125,3 +125,5 @@ Content-Type: application/json
 }
 
 不要把长视频或长播客的完整转录直接发给用户；写回 InfoMind，由 InfoMind 分段解读，控制 token 消耗。
+
+对于 X/Twitter 帖子，如果 InfoMind 提示正文不足，使用浏览器读取真实可见帖子正文并写回 `full_text`。如果帖子附带视频且主要信息在视频里，优先提取可见字幕或整理一段简短转写写回 `transcript`，再触发解读。

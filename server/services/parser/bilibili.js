@@ -2,6 +2,11 @@
 const axios = require('axios');
 
 async function bilibiliParse(url) {
+    const originalUrl = url;
+    if (/https?:\/\/(?:www\.)?b23\.tv\//i.test(url)) {
+        url = await resolveBilibiliShortUrl(url);
+    }
+
     // Extract BV number or AV number
     const bvMatch = url.match(/BV([a-zA-Z0-9]+)/);
     const avMatch = url.match(/av(\d+)/i);
@@ -39,8 +44,19 @@ async function bilibiliParse(url) {
             view: video.stat?.view,
             like: video.stat?.like,
             pubdate: video.pubdate,
+            original_url: originalUrl,
+            final_url: url,
         },
     };
+}
+
+async function resolveBilibiliShortUrl(url) {
+    const response = await axios.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 8000,
+        maxRedirects: 6,
+    });
+    return response.request?.res?.responseUrl || url;
 }
 
 module.exports = { bilibiliParse };

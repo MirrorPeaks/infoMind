@@ -40,7 +40,7 @@ function getConfiguredModel() {
     return getLlmConfig().model;
 }
 
-async function chat(messages, { temperature = 0.3, maxTokens = 1000, timeout = 30000 } = {}) {
+async function chat(messages, { temperature = 0.3, maxTokens = 1000, timeout = 30000, thinking = null } = {}) {
     const { apiKey, baseUrl, model, provider } = getLlmConfig();
     if (!apiKey) throw new Error('LLM API key not configured. Please set it in Settings.');
 
@@ -50,7 +50,7 @@ async function chat(messages, { temperature = 0.3, maxTokens = 1000, timeout = 3
     if (isAnthropic) {
         const response = await axiosInstance.post(
             `${baseUrl.replace(/\/$/, '')}/messages`,
-            { model, messages, temperature, max_tokens: maxTokens },
+            buildAnthropicRequestPayload(messages, { temperature, maxTokens, thinking }, model, baseUrl),
             {
                 headers: {
                     'x-api-key': apiKey,
@@ -60,7 +60,13 @@ async function chat(messages, { temperature = 0.3, maxTokens = 1000, timeout = 3
                 timeout,
             }
         );
-        return response.data.content[0]?.text || '';
+        const content = extractAnthropicText(response.data.content);
+        if (!content) {
+            const err = new Error('LLM returned no text content');
+            err.code = 'LLM_EMPTY_RESPONSE';
+            throw err;
+        }
+        return content;
     }
 
     // Default to OpenAI Compatible API format
@@ -77,6 +83,99 @@ async function chat(messages, { temperature = 0.3, maxTokens = 1000, timeout = 3
     );
 
     return response.data.choices[0]?.message?.content || '';
+}
+
+function buildAnthropicRequestPayload(messages, options, model, baseUrl) {
+    const payload = {
+        model,
+        messages,
+        temperature: options?.temperature ?? 0.3,
+        max_tokens: options?.maxTokens ?? 1000,
+    };
+    const isKimi = /kimi/i.test(String(model || '')) || /api\.kimi\.com/i.test(String(baseUrl || ''));
+    if (options?.thinking === false && isKimi) {
+        payload.thinking = { type: 'disabled' };
+    }
+    return payload;
+}
+
+function extractAnthropicText(content) {
+    if (typeof content === 'string') return content.trim();
+    if (!Array.isArray(content)) return '';
+
+    const textBlocks = content
+        .filter(block => block?.type === 'text' && typeof block.text === 'string')
+        .map(block => block.text.trim())
+        .filter(Boolean);
+    if (textBlocks.length) return textBlocks.join('\n');
+
+    // Some Anthropic-compatible providers return structured output as tool input.
+    const toolBlock = content.find(block => block?.type === 'tool_use' && block.input != null);
+    return toolBlock ? JSON.stringify(toolBlock.input) : '';
+}
+
+async function chatWithRetry(messages, options = {}, retryOptions = {}) {
+    const {
+        retries = 3,
+        delays = [2500, 7000, 15000],
+        onRetry = null,
+    } = retryOptions;
+
+    let lastErr = null;
+    let attemptOptions = { ...options };
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+            return await chat(messages, attemptOptions);
+        } catch (err) {
+            lastErr = err;
+            if (!isRetryableLlmError(err) || attempt >= retries) throw err;
+
+            const retryAfter = parseRetryAfter(err);
+            const delay = retryAfter || (err?.code === 'LLM_EMPTY_RESPONSE'
+                ? 100
+                : delays[Math.min(attempt, delays.length - 1)] || 2500);
+            attemptOptions = expandOutputBudgetForRetry(attemptOptions, err);
+            if (onRetry) await onRetry({ attempt: attempt + 1, retries, delay, err });
+            await sleep(delay);
+        }
+    }
+    throw lastErr;
+}
+
+function getLlmErrorStatus(err) {
+    return err?.response?.status || err?.status || err?.statusCode || null;
+}
+
+function isRateLimitError(err) {
+    const status = getLlmErrorStatus(err);
+    const message = String(err?.message || err || '');
+    return status === 429 || /status code 429|rate limit|too many requests|quota/i.test(message);
+}
+
+function isRetryableLlmError(err) {
+    const status = getLlmErrorStatus(err);
+    if (isRateLimitError(err)) return true;
+    if (err?.code === 'LLM_EMPTY_RESPONSE') return true;
+    return [408, 409, 425, 500, 502, 503, 504].includes(status);
+}
+
+function expandOutputBudgetForRetry(options, err) {
+    if (err?.code !== 'LLM_EMPTY_RESPONSE') return { ...options };
+    const current = Math.max(256, Number(options?.maxTokens || 1000));
+    return { ...options, maxTokens: Math.min(current * 2, 8000) };
+}
+
+function parseRetryAfter(err) {
+    const value = err?.response?.headers?.['retry-after'];
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 60000);
+    const date = value ? Date.parse(value) : NaN;
+    if (Number.isFinite(date)) return Math.min(Math.max(date - Date.now(), 0), 60000);
+    return null;
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function classify(entry) {
@@ -103,7 +202,7 @@ async function classify(entry) {
 }`;
 
 
-    const content = await chat([{ role: 'user', content: prompt }]);
+    const content = await chat([{ role: 'user', content: prompt }], { thinking: false });
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Invalid LLM response format');
 
@@ -125,7 +224,7 @@ ${entrySummaries}
 
 请返回一个不超过15个字的中文书名（不加引号，直接返回书名）：`;
 
-    const title = await chat([{ role: 'user', content: prompt }], { maxTokens: 50 });
+    const title = await chat([{ role: 'user', content: prompt }], { maxTokens: 50, thinking: false });
     return title.trim().replace(/["'《》]/g, '');
 }
 
@@ -140,4 +239,16 @@ async function testLlmConnection() {
     return { model, baseUrl, latency, response: response.trim() };
 }
 
-module.exports = { chat, classify, generateBookTitle, testLlmConnection, getConfiguredModel };
+module.exports = {
+    chat,
+    chatWithRetry,
+    classify,
+    generateBookTitle,
+    testLlmConnection,
+    getConfiguredModel,
+    isRateLimitError,
+    getLlmErrorStatus,
+    extractAnthropicText,
+    expandOutputBudgetForRetry,
+    buildAnthropicRequestPayload,
+};

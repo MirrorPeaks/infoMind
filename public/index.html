@@ -4,9 +4,11 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>InfoMind - 知识书架</title>
+<link rel="icon" type="image/svg+xml" href="/assets/brand/infomind-mark.svg"/>
+<link rel="apple-touch-icon" href="/assets/brand/infomind-app-icon.png"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Manrope:wght@200..800&family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+<link href="/assets/fonts/infomind-fonts.css" rel="stylesheet"/>
+<link href="/assets/icons/lucide/lucide.css" rel="stylesheet"/>
 <script id="tailwind-config">
 tailwind.config = {
     darkMode: "class",
@@ -44,6 +46,7 @@ tailwind.config = {
     body { font-family: 'Manrope', sans-serif; background-color: #fcf9ef; color: #1c1c16; }
     h1, h2, h3, h4, h5, h6, .font-headline { font-family: 'Newsreader', serif; }
     .font-label { font-family: 'Inter', sans-serif; }
+    .infomind-brand-mark { display: block; width: 100%; height: 100%; object-fit: contain; }
 
     /* ── Animation keyframes ──────────────────────────────────────── */
     /* Book card stagger entrance */
@@ -95,18 +98,20 @@ tailwind.config = {
     ::-webkit-scrollbar-thumb:hover { background: #7e7667; }
 </style>
 <link href="/css/kinetic.css?v=20260529-apple-system" rel="stylesheet"/>
+<link href="/css/open-catalog.css?v=20260813-open-catalog" rel="stylesheet"/>
+<link href="/css/speculative-archive.css?v=20260814-specimen-v6" rel="stylesheet"/>
 </head>
 <body class="bg-background text-on-surface antialiased flex h-screen overflow-hidden">
 <!-- SideNavBar -->
 <aside class="app-sidebar h-screen w-72 flex flex-col bg-surface-container-low z-40 fixed left-0 top-0">
     <div class="p-6 space-y-8 flex flex-col h-full">
         <div class="flex items-center space-x-3 mb-8">
-            <div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
-                <span class="material-symbols-outlined text-primary">psychology</span>
+            <div class="w-10 h-10 flex items-center justify-center">
+                <img class="infomind-brand-mark" src="/assets/brand/infomind-mark.svg" alt="InfoMind"/>
             </div>
             <div>
                 <h2 class="font-headline font-bold text-lg text-on-surface">InfoMind</h2>
-                <p class="font-label text-xs text-on-surface/60">个人知识书架</p>
+                <p class="font-label text-xs text-on-surface/60">个人思辨档案</p>
             </div>
         </div>
         <nav class="flex-1 space-y-2">
@@ -129,6 +134,12 @@ tailwind.config = {
                 <span>收录链接</span>
             </button>
         </div>
+        <div class="archive-sidebar-meta" aria-hidden="true">
+            <span>SPECULATIVE ARCHIVE</span>
+            <strong>思辨档案</strong>
+            <small>CAT. VOL.01 / KNOWLEDGE</small>
+            <small>VER. 1.0.0</small>
+        </div>
     </div>
 </aside>
 
@@ -137,13 +148,17 @@ tailwind.config = {
     <!-- TopNavBar -->
     <header class="w-full sticky top-0 z-30 bg-surface/80 backdrop-blur-[16px] transition-colors duration-300">
         <div class="flex justify-between items-center px-8 py-4 max-w-screen-2xl mx-auto">
-            <div class="font-['Newsreader'] italic text-2xl text-on-surface">InfoMind</div>
+            <div id="archiveContext" class="flex items-center gap-2 font-['Newsreader'] text-2xl text-on-surface">
+                <img class="w-7 h-7" src="/assets/brand/infomind-mark.svg" alt="" aria-hidden="true"/>
+                <span>CATALOG / INDEX 01</span>
+            </div>
             <div class="flex items-center space-x-4">
                 <div class="relative hidden sm:block">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface/50 text-sm">search</span>
                     <input id="searchInput" class="pl-9 pr-4 py-2 bg-surface-container-high border-b border-primary focus:border-primary-container focus:bg-surface-container border-b-[1.5px] border-x-0 border-t-0 outline-none rounded-t-sm font-body text-sm text-on-surface w-64 transition-all placeholder:text-on-surface/40" placeholder="搜索书架..." type="search" autocomplete="off" />
                 </div>
                 <!-- Categories filter embedded as a select for simplicity in new UI -->
+                <label class="archive-tool-label" for="sortSelect">排序</label>
                 <select id="sortSelect" class="bg-surface-container-high border-b border-primary border-b-[1.5px] border-x-0 border-t-0 focus:border-primary-container text-on-surface text-sm rounded-t-sm py-2 px-3 outline-none">
                     <option value="created_at">最新优先</option>
                     <option value="title">按标题</option>
@@ -174,21 +189,22 @@ tailwind.config = {
     <!-- Loading Stage -->
     <div id="loadingScreen" class="flex-1 flex flex-col items-center justify-center opacity-70">
         <span class="material-symbols-outlined text-4xl animate-spin mb-4 text-primary">autorenew</span>
-        <p class="font-body text-on-surface-variant">Gathering thoughts...</p>
+        <p class="font-body text-on-surface-variant">正在整理知识条目...</p>
     </div>
 
     <!-- Empty Stage -->
     <div id="emptyState" class="flex-1 flex flex-col items-center justify-center opacity-70 hidden">
         <span class="material-symbols-outlined text-6xl mb-4 text-primary opacity-50">auto_stories</span>
-        <h2 class="font-headline text-2xl text-on-surface mb-2">Shelf is Empty</h2>
-        <p class="font-body text-on-surface-variant mb-6">Start curating your knowledge collection.</p>
+        <h2 class="font-headline text-2xl text-on-surface mb-2">档案尚为空</h2>
+        <p class="font-body text-on-surface-variant mb-6">从第一条值得回看的内容开始。</p>
     </div>
 
     <!-- Bookshelf View -->
     <div id="bookshelfContainer" class="px-8 py-8 max-w-screen-2xl mx-auto w-full flex-1">
         <div class="mb-12 max-w-3xl">
-            <h1 class="font-headline text-5xl font-normal leading-tight text-on-surface mb-4">书架</h1>
-            <p class="font-body text-lg text-on-surface/70 leading-relaxed">把零散链接整理成一本本可回看的知识书。</p>
+            <div class="archive-page-index">01</div>
+            <h1 class="font-headline text-5xl font-normal leading-tight text-on-surface mb-4">书架目录</h1>
+            <p class="font-body text-lg text-on-surface/70 leading-relaxed">以主题为轴，建立可回溯、可解读的个人知识标本。</p>
         </div>
         <div id="bookshelfRows" class="space-y-24"></div>
     </div>
@@ -196,12 +212,13 @@ tailwind.config = {
     <!-- Timeline View -->
     <div id="timelineContainer" class="max-w-3xl mx-auto w-full px-6 py-12 md:py-20 flex-1 hidden">
         <header class="mb-16 max-w-xl">
-            <h2 class="font-headline text-5xl text-on-surface mb-4 leading-tight tracking-tight">Chronological Study</h2>
-            <p class="font-body text-lg text-on-surface-variant leading-relaxed mb-8">A minimalist, linear view of your captured thoughts.</p>
+            <div class="archive-page-index">02</div>
+            <h2 class="font-headline text-5xl text-on-surface mb-4 leading-tight tracking-tight">时间线</h2>
+            <p class="font-body text-lg text-on-surface-variant leading-relaxed mb-8">按照时间顺序浏览你收录的所有内容。</p>
             <!-- Month Navigator -->
             <div class="flex items-center gap-3">
                 <span class="material-symbols-outlined text-on-surface-variant text-lg">calendar_month</span>
-                <label class="font-label text-xs uppercase tracking-widest text-on-surface-variant">Jump to</label>
+                <label class="font-label text-xs uppercase tracking-widest text-on-surface-variant">跳转至</label>
                 <input
                     type="month"
                     id="timelineMonthPicker"
@@ -209,7 +226,7 @@ tailwind.config = {
                 />
                 <button id="timelineJumpBtn"
                     class="px-4 py-1.5 rounded-md bg-primary text-on-primary font-label text-xs uppercase tracking-wide hover:opacity-90 transition-opacity">
-                    Go
+                    定位
                 </button>
             </div>
         </header>
@@ -222,21 +239,28 @@ tailwind.config = {
         <!-- Header with Title and Time Filter -->
         <div class="flex flex-col xl:flex-row xl:justify-between xl:items-end w-full gap-4 mb-2">
             <div>
-                <h2 class="font-headline text-4xl font-medium text-on-surface tracking-tight">Attention Map</h2>
+                <div class="archive-page-index">03</div>
+                <h2 class="font-headline text-4xl font-medium text-on-surface tracking-tight">洞察</h2>
                 <p class="font-body text-sm text-on-surface-variant mt-1">把碎片化收藏折成一张认知带宽地图。</p>
             </div>
-            <div class="flex flex-wrap items-center gap-3">
-                <select id="dashboardTimeFilter" class="bg-surface-container-high border-b border-primary border-b-[1.5px] border-x-0 border-t-0 focus:border-primary-container text-on-surface text-sm rounded-t-sm py-2 px-3 outline-none">
+            <div class="archive-dashboard-controls flex flex-wrap items-center gap-3">
+                <div id="dashboardRangeTabs" class="archive-range-tabs" role="group" aria-label="洞察时间范围">
+                    <button type="button" data-range="1w">近1周</button>
+                    <button type="button" data-range="1m" class="active">近1月</button>
+                    <button type="button" data-range="3m">近3月</button>
+                    <button type="button" data-range="1y">近1年</button>
+                </div>
+                <select id="dashboardTimeFilter" class="hidden" aria-hidden="true" tabindex="-1">
                     <option value="1w">近1周</option>
                     <option value="1m" selected>近30天</option>
                     <option value="3m">近3月</option>
                     <option value="1y">近1年</option>
                 </select>
                 <select id="dashboardCategoryFilter" class="bg-surface-container-high border-b border-primary border-b-[1.5px] border-x-0 border-t-0 focus:border-primary-container text-on-surface text-sm rounded-t-sm py-2 px-3 outline-none">
-                    <option value="">全部类别</option>
+                    <option value="">全部书籍</option>
                 </select>
                 <select id="dashboardPlatformFilter" class="bg-surface-container-high border-b border-primary border-b-[1.5px] border-x-0 border-t-0 focus:border-primary-container text-on-surface text-sm rounded-t-sm py-2 px-3 outline-none">
-                    <option value="">全部来源</option>
+                    <option value="">全部平台</option>
                     <option value="wechat">微信公众号</option>
                     <option value="xiaohongshu">小红书</option>
                     <option value="douyin">抖音</option>
@@ -248,47 +272,43 @@ tailwind.config = {
                 </select>
             </div>
         </div>
-<!-- Bento Grid Layout -->
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+<!-- Analytical plates -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch archive-dashboard-plates">
 <!-- Left Side: Line Chart (Acquisition Frequency) -->
-<section class="lg:col-span-4 h-[640px] bg-surface-container-lowest p-6 md:p-8 shadow-[0_18px_60px_rgba(28,28,22,0.07)] border border-outline-variant/15 rounded-lg relative overflow-hidden flex flex-col">
+<section class="lg:col-span-4 h-[640px] bg-surface-container-lowest p-6 md:p-8 shadow-[0_18px_60px_rgba(28,28,22,0.07)] border border-outline-variant/15 rounded-lg relative overflow-hidden flex flex-col archive-plate archive-trend-plate">
 <!-- Subtle background layer for depth -->
 <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent"></div>
 <div class="flex justify-between items-end mb-8">
 <div>
-<h3 class="font-body text-lg font-semibold text-on-surface mb-1">Capture Trend</h3>
+<h3 class="font-body text-lg font-semibold text-on-surface mb-1">收录趋势</h3>
 <p id="dashboardTrendSubtitle" class="font-label text-sm text-on-surface opacity-60">基于真实收录数据</p>
 </div>
 <div class="flex items-center gap-2">
 <span id="dashboardTrendDelta" class="font-label text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-sm">--</span>
 </div>
 </div>
+<div id="dashboardMetrics" class="archive-dashboard-metrics" aria-live="polite"></div>
 <div id="dashboardTrendChart" class="flex-1 min-h-0 w-full relative flex items-end pt-4"></div>
 </section>
 <!-- Right Side: Heatmap (Knowledge Density) -->
-<section class="lg:col-span-8 h-[640px] bg-[#10110f] p-5 md:p-7 rounded-lg border border-white/10 shadow-[0_24px_80px_rgba(28,28,22,0.16)] relative overflow-hidden flex flex-col">
+<section class="lg:col-span-8 h-[640px] bg-[#10110f] p-5 md:p-7 rounded-lg border border-white/10 shadow-[0_24px_80px_rgba(28,28,22,0.16)] relative overflow-hidden flex flex-col archive-plate archive-heatmap-plate">
 <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
 <div class="mb-5 flex items-end justify-between gap-4 shrink-0">
 <div>
-<h3 class="font-body text-lg font-semibold text-white mb-1">Market Treemap</h3>
+<h3 class="font-body text-lg font-semibold text-white mb-1">来源分布（按类别）</h3>
 <p id="dashboardHeatmapSubtitle" class="font-label text-sm text-white/55">按分类、平台与作者真实分布</p>
 </div>
-<span class="font-label text-[10px] uppercase tracking-[0.24em] text-white/35">area = captures</span>
+<span class="font-label text-[10px] uppercase tracking-[0.24em] text-white/35">AREA = CAPTURES</span>
 </div>
 <div id="dashboardHeatmap" class="w-full flex-1 min-h-0 relative rounded-md bg-[#171814] overflow-hidden"></div>
 <div id="dashboardHeatmapTooltip" class="hidden fixed z-[200] max-w-[320px] rounded-lg bg-[#fcf9ef] text-on-surface border border-outline-variant/30 shadow-[0_24px_80px_rgba(0,0,0,0.22)] p-4 pointer-events-none"></div>
-<div class="mt-5 flex items-center justify-between text-xs font-label text-white/45 shrink-0">
-<span>Category → Platform / Author</span>
-<div class="flex items-center gap-1.5">
-<span class="w-2.5 h-2.5 rounded-full bg-[#8f1d2d]"></span>
-<span class="w-2.5 h-2.5 rounded-full bg-[#07543e]"></span>
-<span class="w-2.5 h-2.5 rounded-full bg-[#07556d]"></span>
-<span class="w-2.5 h-2.5 rounded-full bg-[#2f3339]"></span>
-</div>
-<span>Hover for notes</span>
+<div class="mt-5 flex items-center justify-between text-xs font-label text-white/45 shrink-0 archive-heatmap-legend">
+<span>总计 <strong id="dashboardDistributionTotal">--</strong></span>
+<span>类别 → 平台 / 高频作者</span>
 </div>
 </section>
 </div>
+<section id="dashboardInterpretation" class="archive-interpretation" aria-live="polite"></section>
 </div>
     <div id="searchResults" class="max-w-3xl mx-auto w-full px-6 py-12 flex-1 hidden">
     </div>
@@ -461,12 +481,12 @@ tailwind.config = {
 
 <div id="toastContainer" class="toast-container"></div>
 
+<script src="/js/icons.js?v=20260813-local-lucide-v2"></script>
 <script src="/js/api.js?v=20260602-capture-jobs"></script>
-<script src="/js/bookshelf.js?v=20260602-capture-jobs"></script>
-<script src="/js/modal.js?v=20260602-capture-jobs"></script>
+<script src="/js/bookshelf.js?v=20260813-specimen-v3"></script>
+<script src="/js/modal.js?v=20260813-specimen-v3"></script>
 <script src="/js/settings.js?v=20260602-capture-jobs"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
-<script src="/js/app.js?v=20260602-capture-jobs"></script>
+<script src="/js/app.js?v=20260814-specimen-v5"></script>
 
 <script>
     // Polyfill icon toggling for setting page

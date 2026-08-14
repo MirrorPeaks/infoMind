@@ -7,10 +7,11 @@ InfoMind 是一个个人知识管理系统，用来把分散在网页、视频�
 ## 功能概览
 
 - **链接收录**：支持通过 Web UI、CLI、OpenClaw/Hermes Skill 和 Webhook 保存链接。
-- **多平台解析**：内置 Bilibili、YouTube、Twitter/X、抖音、小红书、知乎、小宇宙和通用网页解析器。
+- **多平台解析**：覆盖 Bilibili、YouTube、Twitter/X、抖音、小红书、知乎、小宇宙、微信公众号、微博和通用网页；公开接口与本机浏览器采集协同工作。
 - **封面缓存**：解析封面图并下载到本地 `data/covers/`，降低远程图片失效和防盗链影响。
 - **AI 分类**：接入 OpenAI-compatible LLM 进行 25 个一级知识分类；LLM 不可用时使用关键词兜底。
-- **真实内容解读**：支持后台生成文章思维导图；视频优先使用字幕，无字幕时可用本地 whisper.cpp 转写后再分析。
+- **真实内容解读**：支持后台生成文章思维导图；视频优先使用字幕，无字幕时用本地 whisper.cpp 转写后再分析，长内容按段提炼以控制 token。
+- **浏览器登录态采集**：抖音、小红书、知乎、微博等动态页面正文不足时进入采集任务，由已配对的 InfoMind Clipper 读取当前页面 DOM，不把平台 Cookie 保存到 InfoMind。
 - **作者聚合书架**：同作者、同平台内容自动聚合为一本“书”，书架页显示最新收录标题和封面。
 - **时间线视图**：按时间查看所有收录内容，支持分类筛选。
 - **洞察页**：提供收录趋势折线图和分类/平台/作者嵌套 Treemap，用于复盘注意力分布。
@@ -170,16 +171,20 @@ POST /api/webhook/openclaw
 
 ## 支持平台
 
-| 平台 | 平台识别 | 元数据解析 | 封面 |
+| 平台 | 平台标识 | 内容获取路径 | 视频/音频解读 |
 | --- | --- | --- | --- |
-| Bilibili | `bilibili` | 视频标题、作者、封面 | 支持 |
-| YouTube | `youtube` | oEmbed 元数据 | 支持 |
-| Twitter/X | `twitter` | oEmbed 元数据 | 平台限制较多 |
-| 抖音 | `douyin` | 页面结构 + 分享文本兜底 | 部分支持 |
-| 小红书 | `xiaohongshu` | Open Graph + 页面结构兜底 | 部分支持 |
-| 知乎 | `zhihu` | Open Graph + 分享文本兜底 | 部分支持 |
-| 小宇宙 | `xiaoyuzhou` | 播客/单集标题、节目名、封面 | 支持 |
-| 通用网页 | `web` | Open Graph / HTML meta | 支持 |
+| Bilibili | `bilibili` | 官方公开 API 获取标题、作者、封面；优先官方字幕 | 无字幕时本地转写 |
+| YouTube | `youtube` | oEmbed 获取元数据；优先官方/自动字幕 | 无字幕时受管 yt-dlp + 本地转写 |
+| Twitter/X | `twitter` | FxTwitter 开源接口获取完整正文、图片和公开视频直链；oEmbed 兜底 | 附视频时直链本地转写 |
+| 抖音 | `douyin` | 分享信息仅用于识别；真实正文、图文和媒体由浏览器采集 | 视频直链本地转写 |
+| 小红书 | `xiaohongshu` | 公开元数据可用时直取；受限页面由浏览器采集正文与图片 | 视频可使用字幕/本地转写 |
+| 知乎 | `zhihu` | 分享文本/公开页面直取；403 或登录页转浏览器采集 | 不适用 |
+| 小宇宙 | `xiaoyuzhou` | 单集标题、节目名、封面、shownotes 与音频直链 | 无文稿时本地转写 |
+| 微信公众号 | `wechat` | Open Graph 元数据 + `#js_content` 正文抽取 | 不适用 |
+| 微博 | `weibo` | 公开页面可用时直取；登录页转浏览器采集 | 视频可使用字幕/本地转写 |
+| 通用网页 | `web` | Open Graph / HTML meta + 可读正文抽取 | 不适用 |
+
+受限平台不会把登录页、错误页或只有 URL 的空壳写入书架，而是创建 `capture_job` 等待浏览器补全。浏览器插件位于 `extensions/web-extension/`，应用设置页提供配对码与安装说明。
 
 ## 洞察页数据模型
 
@@ -318,7 +323,7 @@ curl -s http://127.0.0.1:3456/api/health
 
 公网访问建议通过 Nginx 或 Caddy 做 HTTPS 反向代理。
 
-视频无字幕时，Docker 镜像内置 `yt-dlp`、`ffmpeg` 和 `whisper.cpp`。Whisper 模型文件不进入 Git，需要放到挂载数据目录：
+视频无字幕时，Docker 镜像内置 `yt-dlp`、`ffmpeg` 和 `whisper.cpp`。桌面端会优先复用可用工具；yt-dlp 缺失或版本过期时，从官方 GitHub Release 下载适配系统的单文件版本到 `data/tools/`，校验 SHA-256 后使用。Whisper 模型文件不进入 Git，需要放到挂载数据目录：
 
 ```bash
 mkdir -p data/models
@@ -341,7 +346,13 @@ deploy/README.md
 
 ## 验证与测试
 
-当前项目没有独立测试套件，基础验证建议使用：
+运行自动化测试：
+
+```bash
+node --test tests/*.test.js
+```
+
+基础运行验证：
 
 ```bash
 node --check server/index.js
@@ -374,12 +385,15 @@ curl -s 'http://127.0.0.1:3456/api/stats/advanced?range=1m'
 | `INFOMIND_STT_MODEL_PATH` | `data/models/ggml-base.bin` | whisper.cpp 模型路径，Docker 中通常为 `/app/data/models/ggml-base.bin` |
 | `INFOMIND_STT_LANGUAGE` | `auto` | 本地转写语言，默认自动识别 |
 | `INFOMIND_STT_MAX_DURATION` | `7200` | 自动转写最长视频秒数，超过后不静默消耗资源 |
+| `INFOMIND_YTDLP_PATH` | 空 | 可选，指定自定义 yt-dlp 可执行文件 |
+| `INFOMIND_YTDLP_AUTO_DOWNLOAD` | `1` | 设为 `0` 可关闭官方受管 yt-dlp 自动下载 |
+| `INFOMIND_YTDLP_JS_RUNTIME` | 当前 Node/Electron | 可选，显式指定 yt-dlp 的 JavaScript runtime，例如 `deno:/opt/homebrew/bin/deno` |
 
 ## 注意事项
 
 - 数据库、WAL 文件、封面缓存和备份文件不应提交到 Git。
 - 迁移生产环境时应同步整个 `data/` 目录，而不是只复制 `.db` 文件。
-- 小红书、知乎、X 等平台页面结构和访问策略变化较快，解析器包含兜底逻辑，但不能保证所有链接都能稳定拿到完整封面和作者。
+- 抖音、小红书、知乎、微博等平台页面结构和访问策略变化较快；公开解析不足时应保持 Chrome/Edge/Arc 中的 InfoMind Clipper 已配对，由浏览器登录态页面完成采集。
 - `INFOMIND_SECRET` 变更会影响已加密配置的解密。
 
 ## License

@@ -7,6 +7,7 @@ class ApiClient {
             method,
             headers: { 'Content-Type': 'application/json' },
         };
+        if (method === 'GET') opts.cache = 'no-store';
         if (body) opts.body = JSON.stringify(body);
 
         const res = await fetch(API_BASE + path, opts);

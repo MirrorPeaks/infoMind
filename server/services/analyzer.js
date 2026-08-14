@@ -1,18 +1,31 @@
 const crypto = require('crypto');
-const { chat, getConfiguredModel } = require('./llm');
+const { jsonrepair } = require('jsonrepair');
+const { chatWithRetry, getConfiguredModel, isRateLimitError } = require('./llm');
 const { extractEntryContent } = require('./contentExtractor');
 const { ensureVideoTranscript, isVideoEntry } = require('./videoTranscript');
 const queries = require('../db/queries');
 const logger = require('../utils/logger');
 
-const DIRECT_ANALYSIS_CHARS = 12000;
+const DIRECT_ANALYSIS_CHARS = 22000;
 const MAX_ANALYSIS_CHARS = 36000;
 const CHUNK_SIZE = 5200;
+const CHUNK_LLM_DELAY_MS = 1200;
 const activeJobs = new Map();
 let analysisQueue = Promise.resolve();
 
-function getEntryAnalysis(entryId) {
-    return queries.getEntryAnalysis(entryId);
+function getEntryAnalysis(entryId, { autoRecover = false } = {}) {
+    const analysis = queries.getEntryAnalysis(entryId);
+    if (autoRecover && shouldAutoRecoverAnalysis(analysis) && !activeJobs.has(entryId)) {
+        return startEntryAnalysis(entryId, { force: true });
+    }
+    return analysis;
+}
+
+function shouldAutoRecoverAnalysis(analysis) {
+    if (analysis?.status !== 'failed') return false;
+    const error = String(analysis.error || '');
+    return /格式不完整|自动修复.*失败|malformed|invalid llm|json|parse/i.test(error)
+        && !/401|403|unauthori[sz]ed|api key|鉴权/i.test(error);
 }
 
 function startEntryAnalysis(entryId, { force = false } = {}) {
@@ -48,7 +61,7 @@ async function runEntryAnalysisNow(entryId, { force = false } = {}) {
     }
 
     await updateProgress(entry, 8, '准备正文');
-    if (force && isVideoEntry(entry)) {
+    if (force && isVideoEntry(entry) && shouldForceTranscriptBeforeAnalysis(entry) && !hasStoredTranscript(entry)) {
         const transcript = await ensureVideoTranscript(entry, (progress, stage) => updateProgress(entry, progress, stage), { force: true });
         if (transcript.ok) {
             entry = queries.getEntryById(entryId);
@@ -98,8 +111,55 @@ async function runEntryAnalysisNow(entryId, { force = false } = {}) {
             finished_at: new Date().toISOString(),
         });
     } catch (err) {
+        if (extracted?.hasEnoughContent) {
+            logger.warn(`Structured analysis failed for ${entryId}; using extractive fallback: ${friendlyAnalysisError(err)}`);
+            const result = buildExtractiveFallbackAnalysis(entry, extracted.text, friendlyAnalysisError(err));
+            return queries.upsertEntryAnalysis({
+                entry_id: entryId,
+                status: 'done',
+                content_hash: contentHash,
+                source_kind: extracted.sourceKind,
+                source_length: extracted.sourceLength,
+                model: `${getConfiguredModel()} + offline-fallback`,
+                token_budget: 'offline_fallback',
+                progress: 100,
+                stage: '完成（安全降级）',
+                result,
+                error: null,
+                finished_at: new Date().toISOString(),
+            });
+        }
         return markFailed(entryId, entry, err, 100, '生成失败', extracted, contentHash);
     }
+}
+
+function shouldForceTranscriptBeforeAnalysis(entry) {
+    if (entry.platform === 'xiaoyuzhou') return true;
+    if (entry.platform !== 'twitter') return true;
+    const source = entry.source_data || {};
+    const text = [
+        source.transcript_clean,
+        source.subtitle_text,
+        source.transcript,
+        source.full_text,
+        source.tweet_text,
+        source.description,
+        entry.summary,
+    ].filter(Boolean).join('\n');
+    const meaningful = String(text).replace(/[^\p{Script=Han}a-z0-9]/giu, '').length;
+    return meaningful < 80;
+}
+
+function hasStoredTranscript(entry) {
+    const source = entry.source_data || {};
+    const text = [
+        source.transcript_clean,
+        source.subtitle_text,
+        source.transcript,
+        source.transcript_raw,
+    ].filter(Boolean).join('\n');
+    const meaningful = String(text).replace(/[^\p{Script=Han}a-z0-9]/giu, '').length;
+    return meaningful >= 420;
 }
 
 async function generateStructuredAnalysis(entry, text, progress = async () => {}) {
@@ -113,8 +173,10 @@ async function generateStructuredAnalysis(entry, text, progress = async () => {}
     const chunkSummaries = [];
     for (let i = 0; i < chunks.length; i += 1) {
         await progress(32 + Math.round((i / chunks.length) * 38), `分段摘要 ${i + 1}/${chunks.length}`);
+        if (i > 0) await sleep(CHUNK_LLM_DELAY_MS);
         chunkSummaries.push(await summarizeChunk(entry, chunks[i], i + 1, chunks.length));
     }
+    await sleep(CHUNK_LLM_DELAY_MS);
     await progress(76, '合并分段观点');
     return generateFinalMindMap(entry, chunkSummaries.map(item => JSON.stringify(item)).join('\n\n'), chunkSummaries, progress);
 }
@@ -138,9 +200,14 @@ ${chunk}
   "questions": ["值得继续追问的问题"]
 }`;
     try {
-        const text = await chat([{ role: 'user', content: prompt }], { temperature: 0.2, maxTokens: 900, timeout: 90000 });
+        const text = await chatWithRetry([{ role: 'user', content: prompt }], { temperature: 0.2, maxTokens: 1800, timeout: 90000, thinking: false }, {
+            onRetry: ({ attempt, delay, err }) => {
+                logger.warn(`Analysis chunk retry ${attempt} after ${delay}ms: ${friendlyAnalysisError(err)}`);
+            },
+        });
         return await parseJsonObjectWithRepair(text, '分段摘要 JSON');
     } catch (err) {
+        if (isRateLimitError(err)) throw err;
         return {
             segment: `${index}/${total}`,
             claims: [`本段解析失败，已跳过：${friendlyAnalysisError(err)}`],
@@ -160,6 +227,7 @@ async function generateFinalMindMap(entry, content, chunkSummaries = [], progres
 3. 如果内容是分段摘要，请综合各段，保留重要脉络。
 4. 节点名称要短，detail 可以稍长。
 5. 返回严格 JSON，不要 Markdown，不要解释。
+6. 输出 3-5 个一级节点，每个一级节点 2-4 个二级节点；label 不超过 18 字，summary/detail/evidence 各不超过 90 字，避免输出被截断。
 
 内容元信息：
 - 标题：${entry.title || '无标题'}
@@ -199,9 +267,18 @@ JSON 结构：
 }`;
 
     await progress(84, '生成最终导图');
-    const response = await chat([{ role: 'user', content: prompt }], { temperature: 0.25, maxTokens: 2600, timeout: 90000 });
+    const response = await chatWithRetry([{ role: 'user', content: prompt }], { temperature: 0.2, maxTokens: 3200, timeout: 90000, thinking: false }, {
+        onRetry: async ({ attempt, delay, err }) => {
+            logger.warn(`Final analysis retry ${attempt} after ${delay}ms: ${friendlyAnalysisError(err)}`);
+            await progress(84, `模型繁忙，等待重试 ${attempt}`);
+        },
+    });
     const parsed = await parseJsonObjectWithRepair(response, '思维导图 JSON');
-    return normalizeAnalysisResult(parsed, entry);
+    const normalized = normalizeAnalysisResult(parsed, entry);
+    if (!isUsableAnalysisResult(normalized)) {
+        throw new Error('LLM returned analysis without substantive mind-map content');
+    }
+    return normalized;
 }
 
 async function parseJsonObjectWithRepair(text, purpose) {
@@ -212,7 +289,11 @@ async function parseJsonObjectWithRepair(text, purpose) {
 
 原始内容：
 ${String(text || '').slice(0, 12000)}`;
-    const repaired = await chat([{ role: 'user', content: prompt }], { temperature: 0, maxTokens: 2800, timeout: 90000 });
+    const repaired = await chatWithRetry([{ role: 'user', content: prompt }], { temperature: 0, maxTokens: 2800, timeout: 90000, thinking: false }, {
+        onRetry: ({ attempt, delay, err }) => {
+            logger.warn(`Analysis JSON repair retry ${attempt} after ${delay}ms: ${friendlyAnalysisError(err)}`);
+        },
+    });
     const second = parseJsonObject(repaired);
     if (second.ok) return second.value;
     throw new Error('LLM returned malformed analysis JSON after repair');
@@ -222,11 +303,17 @@ function parseJsonObject(text) {
     const cleaned = String(text || '').replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
     const start = cleaned.indexOf('{');
     if (start < 0) return { ok: false };
-    const candidate = extractBalancedJson(cleaned, start) || cleaned.slice(start, cleaned.lastIndexOf('}') + 1);
+    const balanced = extractBalancedJson(cleaned, start);
+    const lastBrace = cleaned.lastIndexOf('}');
+    const candidate = balanced || (lastBrace >= start ? cleaned.slice(start, lastBrace + 1) : cleaned.slice(start));
     try {
         return { ok: true, value: JSON.parse(candidate) };
     } catch {
-        return { ok: false };
+        try {
+            return { ok: true, value: JSON.parse(jsonrepair(candidate)) };
+        } catch {
+            return { ok: false };
+        }
     }
 }
 
@@ -254,6 +341,110 @@ function normalizeAnalysisResult(result, entry) {
         content_coverage: result?.content_coverage || '基于当前可获取正文生成',
         limitations: Array.isArray(result?.limitations) ? result.limitations.slice(0, 4) : [],
     };
+}
+
+function isUsableAnalysisResult(result) {
+    const nodes = Array.isArray(result?.mind_map?.nodes) ? result.mind_map.nodes : [];
+    const childCount = nodes.reduce((total, node) => total + (Array.isArray(node?.children) ? node.children.length : 0), 0);
+    if (!nodes.length || childCount < 1) return false;
+
+    const semanticText = [
+        result?.thesis,
+        result?.content_coverage,
+        ...nodes.flatMap(node => [
+            node?.label,
+            node?.summary,
+            ...(Array.isArray(node?.children) ? node.children.flatMap(child => [child?.label, child?.detail]) : []),
+        ]),
+    ].filter(Boolean).join(' ');
+    return !/(正文|内容|分段摘要).{0,12}(解析失败|未解析|未获得|缺失|为空)|只能基于.{0,12}(标题|元信息)|LLM returned no text content/i.test(semanticText);
+}
+
+function buildExtractiveFallbackAnalysis(entry, text, reason) {
+    const body = stripMetadataLines(text);
+    const windows = chunkText(body, Math.ceil(Math.max(body.length, 1) / 4)).filter(Boolean).slice(0, 4);
+    const allSentences = selectUsefulSentences(body, 10);
+    const nodes = windows.map((windowText, index) => {
+        const sentences = selectUsefulSentences(windowText, 4);
+        const lead = sentences[0] || allSentences[index] || entry.summary || entry.title || '内容要点';
+        return {
+            label: compactLabel(lead, `要点 ${index + 1}`),
+            summary: lead,
+            children: sentences.slice(0, 4).map(sentence => ({
+                label: compactLabel(sentence, '知识点'),
+                detail: sentence,
+                evidence: sentence,
+            })),
+        };
+    }).filter(node => node.summary);
+
+    return normalizeAnalysisResult({
+        title: entry.title || '内容解读',
+        thesis: allSentences[0] || entry.summary || '已基于可获取正文生成离线提取式导图。',
+        mind_map: {
+            root: entry.title || '内容解读',
+            nodes: nodes.length ? nodes : [{
+                label: '正文线索',
+                summary: allSentences[0] || body.slice(0, 140),
+                children: allSentences.slice(1, 5).map(sentence => ({
+                    label: compactLabel(sentence, '知识点'),
+                    detail: sentence,
+                    evidence: sentence,
+                })),
+            }],
+        },
+        knowledge_points: allSentences.slice(0, 8).map(sentence => compactLabel(sentence, sentence)),
+        questions: [
+            '哪些观点值得结合原文进一步复核？',
+            '这些经验是否能迁移到自己的项目或组织里？',
+        ],
+        content_coverage: '基于已保存正文/转写稿生成的离线提取式导图。',
+        limitations: [
+            reason,
+            '当前版本先抽取真实文本中的关键句和证据线索；模型额度恢复后可点击重试生成更深入的观点关系。',
+        ],
+    }, entry);
+}
+
+function stripMetadataLines(text) {
+    return normalizeLooseText(text)
+        .split('\n')
+        .filter(line => !/^(标题|作者|分类|标签|已有摘要|备注):/.test(line.trim()))
+        .join('\n');
+}
+
+function selectUsefulSentences(text, limit) {
+    const seen = new Set();
+    const sentences = normalizeLooseText(text)
+        .split(/(?<=[。！？!?])|[\n\r]+/u)
+        .map(sentence => sentence.replace(/\s+/g, ' ').trim())
+        .filter(sentence => sentence.length >= 18 && sentence.length <= 180)
+        .filter(sentence => {
+            const key = sentence.replace(/[^\p{Script=Han}a-z0-9]/giu, '').slice(0, 80);
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return !/^(标题|作者|分类|标签|已有摘要|备注)[:：]/.test(sentence);
+        });
+    return sentences.slice(0, limit);
+}
+
+function compactLabel(sentence, fallback) {
+    const text = normalizeLooseText(sentence)
+        .replace(/^[“"'「『（(【\[]+/, '')
+        .replace(/[”"'」』）)】\]]+$/, '')
+        .trim();
+    if (!text) return fallback;
+    const stop = text.search(/[。！？!?，,；;]/u);
+    const label = (stop > 8 ? text.slice(0, stop) : text).slice(0, 32);
+    return label || fallback;
+}
+
+function normalizeLooseText(value) {
+    return String(value || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 function markProcessing(entry, progress, stage) {
@@ -336,8 +527,13 @@ function markFailed(entryId, entry, err, progress = 100, stage = '生成失败',
 
 function friendlyAnalysisError(err) {
     const message = String(err?.message || err || '未知错误');
+    if (isRateLimitError(err)) return '模型服务限流或额度不足（HTTP 429）。转写稿已保存，稍后重试会直接复用转写稿。';
     if (/malformed|Invalid LLM|JSON|parse/i.test(message)) return '模型返回的解读格式不完整，已尝试自动修复但仍失败。请重试生成。';
     return message;
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function extractBalancedJson(text, start) {
@@ -377,7 +573,16 @@ function getRequiredContent(platform) {
     if (platform === 'xiaoyuzhou') return '播客文稿或音频转录文本';
     if (platform === 'xiaohongshu') return '帖子正文、图片 OCR 或浏览器抓取正文';
     if (platform === 'douyin') return '字幕、视频转录文本、图文正文或图片 OCR';
+    if (platform === 'twitter') return '帖子正文、可见字幕、视频转录文本或浏览器抓取正文';
     return '正文内容或可读网页文本';
 }
 
-module.exports = { getEntryAnalysis, startEntryAnalysis, runEntryAnalysisNow };
+module.exports = {
+    getEntryAnalysis,
+    startEntryAnalysis,
+    runEntryAnalysisNow,
+    parseJsonObject,
+    buildExtractiveFallbackAnalysis,
+    isUsableAnalysisResult,
+    shouldAutoRecoverAnalysis,
+};

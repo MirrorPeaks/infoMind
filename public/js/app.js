@@ -100,7 +100,7 @@ function renderDashboardFilterOptions(categories) {
     const select = document.getElementById('dashboardCategoryFilter');
     if (!select) return;
     const current = select.value;
-    select.innerHTML = '<option value="">全部类别</option>';
+    select.innerHTML = '<option value="">全部类型</option>';
     for (const cat of categories || []) {
         const option = document.createElement('option');
         option.value = cat.name;
@@ -160,6 +160,18 @@ const VIEW_MAP = {
 function setView(view) {
     const prevView = state.view;
     state.view = view;
+    document.body.dataset.archiveView = view;
+    const context = document.getElementById('archiveContext');
+    if (context) {
+        const labels = {
+            shelf: 'CATALOG / INDEX 01',
+            timeline: 'TIMELINE / INDEX 02',
+            dashboard: 'INSIGHTS / INDEX 03',
+            search: 'SEARCH / OPEN INDEX',
+        };
+        const label = context.querySelector('span');
+        if (label) label.textContent = labels[view] || labels.shelf;
+    }
     const transitionSeq = ++viewTransitionSeq;
 
     // Update active styles in side nav
@@ -212,6 +224,7 @@ function setView(view) {
 
 // ── Render Current View ──────────────────────────────────────────────────────
 function renderCurrentView() {
+    document.body.dataset.archiveView = state.view;
     const filtered = state.category
         ? state.allBooks.filter(b => b.category === state.category)
         : state.allBooks;
@@ -388,8 +401,67 @@ function buildClientTrend(rows, start, days) {
 }
 
 function renderDashboardData(data) {
+    renderDashboardMetrics(data);
     renderTrendChart(data);
     renderCategoryHeatmap(data);
+    renderDashboardInterpretation(data);
+}
+
+function renderDashboardMetrics(data) {
+    const container = document.getElementById('dashboardMetrics');
+    if (!container) return;
+    const summary = data.summary || {};
+    const peak = Math.max(0, ...(data.trend || []).map(item => Number(item.count) || 0));
+    container.innerHTML = `
+        <div class="archive-metric"><small>总收录</small><strong>${summary.total_entries || 0}</strong><em>${rangeLabel(data.range)}</em></div>
+        <div class="archive-metric"><small>日均</small><strong>${((summary.total_entries || 0) / Math.max(1, summary.active_days || 1)).toFixed(1)}</strong><em>${summary.active_days || 0} 个活跃日</em></div>
+        <div class="archive-metric"><small>最高单日</small><strong>${peak}</strong><em>${summary.delta_percent >= 0 ? '+' : ''}${summary.delta_percent || 0}%</em></div>
+    `;
+}
+
+function renderDashboardInterpretation(data) {
+    const container = document.getElementById('dashboardInterpretation');
+    if (!container) return;
+    const categories = (data.heatmap || []).filter(item => item.count > 0);
+    const first = categories[0];
+    const second = categories[1];
+    const platforms = categories.flatMap(category => category.children || []);
+    const topPlatform = [...platforms].sort((a, b) => b.count - a.count)[0];
+    container.innerHTML = `
+        <div class="archive-interpretation-heading">
+            <h3>洞察解读</h3>
+            <span>PLATE 03-C</span>
+        </div>
+        <div class="archive-interpretation-grid">
+            <article class="archive-insight">
+                <span class="archive-insight-index">01</span>
+                <span class="archive-insight-glyph archive-glyph-radar" aria-hidden="true"><i></i></span>
+                <div>
+                    <small>主导类别</small>
+                    <h4>${first ? `${escapeHtml(first.name)} ${Math.round(first.percent || 0)}%` : '等待形成主导领域'}</h4>
+                    <p>${first ? `${escapeHtml(first.name)}内容占据最大比重，反映出当前最持续的知识投入方向。` : '当前筛选范围暂无足够数据形成判断。'}</p>
+                </div>
+            </article>
+            <article class="archive-insight">
+                <span class="archive-insight-index">02</span>
+                <span class="archive-insight-glyph archive-glyph-network" aria-hidden="true"><i></i></span>
+                <div>
+                    <small>平台依赖度</small>
+                    <h4>${topPlatform ? `高度集中于 ${escapeHtml(topPlatform.platform_label || topPlatform.platform)}` : '来源结构较为分散'}</h4>
+                    <p>${topPlatform ? `${escapeHtml(topPlatform.platform_label || topPlatform.platform)}贡献 ${topPlatform.count} 条收录，建议结合其他来源校正信息结构。` : '尚未形成明显的平台依赖。'}</p>
+                </div>
+            </article>
+            <article class="archive-insight">
+                <span class="archive-insight-index">03</span>
+                <span class="archive-insight-glyph archive-glyph-drift" aria-hidden="true"><i></i></span>
+                <div>
+                    <small>注意力结构</small>
+                    <h4>${second ? `${escapeHtml(second.name)}成为第二阵地` : '注意力结构仍在形成'}</h4>
+                    <p>${second ? `${escapeHtml(second.name)}占比 ${Math.round(second.percent || 0)}%，与${escapeHtml(first?.name || '首要领域')}共同构成近期兴趣重心。` : '继续收录后，InfoMind 会显示你的注意力迁移。'}</p>
+                </div>
+            </article>
+        </div>
+    `;
 }
 
 function normalizeDashboardStats(raw, fallbackRange = '1m') {
@@ -465,10 +537,7 @@ function renderTrendChart(data) {
         const y = bounds.bottom - (d.count / maxY) * (bounds.bottom - bounds.top);
         return { ...d, x, y };
     });
-    const linePath = buildSmoothPath(points);
-    const areaPath = points.length
-        ? `${linePath} L${points[points.length - 1].x.toFixed(2)},${bounds.bottom} L${points[0].x.toFixed(2)},${bounds.bottom} Z`
-        : '';
+    const linePath = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
     const tickIndexes = buildTickIndexes(trend.length);
     const yTicks = Array.from({ length: 5 }, (_, i) => {
         const ratio = i / 4;
@@ -480,51 +549,34 @@ function renderTrendChart(data) {
     const activeMarkers = selectVisibleMarkers(points.filter(p => p.count > 0), 18);
     const peakPoint = points.reduce((best, p) => p.count > best.count ? p : best, points[0] || { count: 0, x: bounds.left, y: bounds.bottom });
     const lastActivePoint = [...points].reverse().find(p => p.count > 0) || points[points.length - 1];
-    const accent = '#0066cc';
-    const accentSoft = '#2997ff';
+    const ink = '#1a1a17';
+    const accent = '#d16f86';
+    const average = trend.length ? summary.total_entries / trend.length : 0;
+    const averageY = bounds.bottom - (average / maxY) * (bounds.bottom - bounds.top);
 
     subtitle.textContent = `${rangeLabel(data.range)} · ${summary.total_entries} 条收录 · ${summary.active_days} 个活跃日`;
     const delta = summary.delta_percent;
     deltaEl.textContent = `${delta >= 0 ? '+' : ''}${delta}%`;
-    deltaEl.className = `font-label text-xs font-semibold px-2.5 py-1 rounded-full ${delta >= 0 ? 'text-primary bg-primary/10' : 'text-error bg-error-container/50'}`;
+    deltaEl.className = 'archive-trend-delta';
 
     chartEl.innerHTML = `
-        <div class="absolute left-0 top-0 z-20 flex gap-3">
-            <div class="rounded-md bg-surface-container-lowest/90 border border-outline-variant/20 px-3 py-2 shadow-[0_10px_30px_rgba(28,28,22,0.06)]">
-                <div class="font-label text-[10px] uppercase tracking-[0.18em] text-on-surface/45">Total</div>
-                <div class="font-headline text-2xl leading-none text-on-surface mt-1">${summary.total_entries}</div>
-            </div>
-            <div class="rounded-md bg-surface-container-low/90 border border-outline-variant/15 px-3 py-2">
-                <div class="font-label text-[10px] uppercase tracking-[0.18em] text-on-surface/45">Peak</div>
-                <div class="font-headline text-2xl leading-none text-on-surface mt-1">${peakPoint?.count || 0}</div>
-            </div>
-        </div>
         <svg class="absolute inset-0 h-full w-full z-10" preserveAspectRatio="none" viewBox="0 0 100 100" aria-label="Capture trend chart">
-            <defs>
-                <linearGradient id="trendAreaGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="${accentSoft}" stop-opacity="0.34"></stop>
-                    <stop offset="72%" stop-color="${accentSoft}" stop-opacity="0.05"></stop>
-                    <stop offset="100%" stop-color="${accentSoft}" stop-opacity="0"></stop>
-                </linearGradient>
-                <filter id="trendLineGlow" x="-10%" y="-40%" width="120%" height="180%">
-                    <feDropShadow dx="0" dy="0" stdDeviation="0" flood-color="${accent}" flood-opacity="0"/>
-                </filter>
-            </defs>
-            <rect x="${bounds.left}" y="${bounds.top}" width="${bounds.right - bounds.left}" height="${bounds.bottom - bounds.top}" rx="1.5" fill="#fafafc" opacity="0.92"></rect>
             ${yTicks.map(tick => `
-                <line x1="${bounds.left}" x2="${bounds.right}" y1="${tick.y.toFixed(2)}" y2="${tick.y.toFixed(2)}" stroke="#d2d2d7" stroke-width="0.28" stroke-dasharray="1.5 2.2" opacity="0.7"></line>
-                <text x="1.6" y="${(tick.y + 1).toFixed(2)}" font-size="3.2" fill="#6e6e73" font-family="system-ui, -apple-system, sans-serif">${tick.value}</text>
+                <line x1="${bounds.left}" x2="${bounds.right}" y1="${tick.y.toFixed(2)}" y2="${tick.y.toFixed(2)}" stroke="#d8d5cc" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0.72"></line>
+                <text x="1.6" y="${(tick.y + 1).toFixed(2)}" font-size="3.2" fill="#6c6a63" font-family="ui-monospace, SFMono-Regular, monospace">${tick.value}</text>
             `).join('')}
-            <line x1="${bounds.left}" x2="${bounds.right}" y1="${bounds.bottom}" y2="${bounds.bottom}" stroke="#d2d2d7" stroke-width="0.35" opacity="0.8"></line>
-            ${areaPath ? `<path d="${areaPath}" fill="url(#trendAreaGradient)"></path>` : ''}
-            ${linePath ? `<path d="${linePath}" fill="none" stroke="${accent}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35"></path>` : ''}
-            ${activeMarkers.map(p => `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="1.15" fill="#ffffff" stroke="${accent}" stroke-width="0.65"></circle>`).join('')}
-            ${peakPoint?.count > 0 ? `
-                <line x1="${peakPoint.x.toFixed(2)}" x2="${peakPoint.x.toFixed(2)}" y1="${peakPoint.y.toFixed(2)}" y2="${bounds.bottom}" stroke="${accent}" stroke-width="0.35" stroke-dasharray="1 1.6" opacity="0.5"></line>
-                <circle cx="${peakPoint.x.toFixed(2)}" cy="${peakPoint.y.toFixed(2)}" r="2.25" fill="${accent}" opacity="0.16"></circle>
-                <circle cx="${peakPoint.x.toFixed(2)}" cy="${peakPoint.y.toFixed(2)}" r="1.15" fill="${accent}"></circle>
+            <line x1="${bounds.left}" x2="${bounds.right}" y1="${bounds.bottom}" y2="${bounds.bottom}" stroke="#aaa69b" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0.8"></line>
+            ${average > 0 ? `
+                <line x1="${bounds.left}" x2="${bounds.right}" y1="${averageY.toFixed(2)}" y2="${averageY.toFixed(2)}" stroke="${accent}" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="5 5"></line>
+                <text x="${bounds.right - 1}" y="${(averageY - 1.6).toFixed(2)}" text-anchor="end" font-size="3" fill="${accent}" font-family="ui-monospace, SFMono-Regular, monospace">日均 ${average.toFixed(1)}</text>
             ` : ''}
-            ${lastActivePoint?.count > 0 ? `<circle cx="${lastActivePoint.x.toFixed(2)}" cy="${lastActivePoint.y.toFixed(2)}" r="1.55" fill="#ffffff" stroke="${accent}" stroke-width="0.9"></circle>` : ''}
+            ${linePath ? `<path d="${linePath}" fill="none" stroke="${ink}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" vector-effect="non-scaling-stroke"></path>` : ''}
+            ${activeMarkers.map(p => `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="0.62" fill="#f8f6ef" stroke="${ink}" stroke-width="1.15" vector-effect="non-scaling-stroke"></circle>`).join('')}
+            ${peakPoint?.count > 0 ? `
+                <circle cx="${peakPoint.x.toFixed(2)}" cy="${peakPoint.y.toFixed(2)}" r="1.45" fill="${accent}" opacity="0.16"></circle>
+                <circle cx="${peakPoint.x.toFixed(2)}" cy="${peakPoint.y.toFixed(2)}" r="0.72" fill="#f8f6ef" stroke="${ink}" stroke-width="1.15" vector-effect="non-scaling-stroke"></circle>
+            ` : ''}
+            ${lastActivePoint?.count > 0 ? `<circle cx="${lastActivePoint.x.toFixed(2)}" cy="${lastActivePoint.y.toFixed(2)}" r="0.78" fill="#f8f6ef" stroke="${ink}" stroke-width="1.35" vector-effect="non-scaling-stroke"></circle>` : ''}
         </svg>
         <div class="absolute bottom-1 left-[8%] right-[2%] z-20 flex justify-between text-[10px] font-label text-on-surface/45">
             ${tickIndexes.map(i => `<span>${formatChartDate(trend[i]?.date, data.range)}</span>`).join('')}
@@ -540,12 +592,14 @@ function renderCategoryHeatmap(data) {
     const categories = (data.heatmap || []).filter(cat => cat.count > 0);
     const summary = data.summary || { total_entries: 0, top_category: null };
     const sourceCount = new Set(categories.flatMap(cat => (cat.children || []).map(child => child.platform))).size;
+    const totalEl = document.getElementById('dashboardDistributionTotal');
+    if (totalEl) totalEl.textContent = `${summary.total_entries || 0} (100%)`;
     subtitle.textContent = summary.top_category
         ? `${rangeLabel(data.range)} · ${summary.total_entries} 条 · ${categories.length} 类 · ${sourceCount} 个来源`
         : '当前时间范围暂无分类标签数据';
 
     if (!categories.length) {
-        heatmapEl.innerHTML = '<div class="absolute inset-0 flex items-center justify-center rounded-lg bg-[#171814] text-sm text-white/45">当前筛选条件下暂无收录</div>';
+        heatmapEl.innerHTML = '<div class="archive-dashboard-empty">当前筛选条件下暂无收录</div>';
         if (tooltip) tooltip.classList.add('hidden');
         return;
     }
@@ -565,66 +619,70 @@ function renderCategoryHeatmap(data) {
 }
 
 function drawAttentionTreemap(container, tooltip, categories, totalEntries) {
-    const width = Math.max(320, container.clientWidth || 0);
-    const height = Math.max(420, container.clientHeight || 0);
-    const categoryRects = sliceTreemap(
-        categories.map(cat => ({ ...cat, value: cat.count })),
-        { x: 0, y: 0, w: width, h: height },
-        7
-    );
-
-    container.innerHTML = categoryRects.map(({ item: cat, rect }) => {
-        const categoryColor = normalizeHexColor(cat.color || '#727063');
-        const compactHeader = rect.w < 210 || rect.h < 145;
-        const headerHeight = compactHeader ? 46 : 58;
+    const visibleCategories = categories.slice(0, 4);
+    const categoryRows = [visibleCategories.slice(0, 2), visibleCategories.slice(2, 4)].filter(row => row.length);
+    container.innerHTML = `<div class="archive-category-quadrants">${categoryRows.map((row, rowIndex) => {
+        const rowCount = row.reduce((sum, category) => sum + category.count, 0);
+        const rowStyle = `--row-weight:${rowCount};--row-columns:${row.map(category => Math.max(1, category.count)).join('fr ')}fr`;
+        return `<div class="archive-category-row" style="${rowStyle}">${row.map((cat, columnIndex) => {
+        const index = rowIndex * 2 + columnIndex;
+        const categoryColor = normalizeHexColor(cat.color || ['#5d928c', '#d58b9d', '#d79a5c', '#6d9fa6'][index]);
         const categoryPercent = Number(cat.percent) || Math.round((cat.count / Math.max(1, totalEntries)) * 100);
-        const childArea = {
-            x: 9,
-            y: headerHeight + 6,
-            w: Math.max(0, rect.w - 18),
-            h: Math.max(0, rect.h - headerHeight - 15),
-        };
-        const childRects = sliceTreemap(
-            (cat.children?.length ? cat.children : [{
-                platform: 'web',
-                platform_label: 'Web',
-                platform_color: categoryColor,
-                author: '未知作者',
-                count: cat.count,
-                percent_of_category: 100,
-                percent_of_total: cat.percent,
-                recent: [],
-            }]).map(child => ({ ...child, value: child.count })),
-            childArea,
-            5
-        );
-
+        const platforms = aggregateCategoryPlatforms(cat.children || []).slice(0, 5);
+        const authors = aggregateCategoryAuthors(cat.children || []).slice(0, 5);
         return `
-            <section class="absolute rounded-md overflow-hidden transition-all duration-500"
-                style="left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;background:${hexToRgba(categoryColor, 0.17)};box-shadow: inset 0 0 0 1px ${hexToRgba(categoryColor, 0.38)};">
-                <div class="absolute inset-x-0 top-0 px-3 flex items-center justify-between gap-3 border-b border-white/10"
-                     style="height:${headerHeight}px;background:linear-gradient(90deg, ${hexToRgba(categoryColor, 0.24)}, rgba(255,255,255,0.02));">
-                    <div class="min-w-0 flex items-center gap-2.5">
-                        <span class="material-symbols-outlined text-[18px] text-white/78 shrink-0">${escapeHtml((window.getCategoryMeta ? window.getCategoryMeta(cat.name).icon : cat.icon) || 'category')}</span>
-                        <div class="min-w-0">
-                            <div class="font-body ${compactHeader ? 'text-xs' : 'text-sm'} font-semibold text-white truncate">${escapeHtml(cat.name)}</div>
-                            <div class="font-label text-[10px] uppercase tracking-[0.16em] text-white/48 truncate">${escapeHtml(cat.label_en || getShortCategoryLabel(cat.name))}</div>
-                        </div>
+            <section class="archive-category-quadrant" style="--quadrant-color:${categoryColor};--quadrant-bg:${hexToRgba(categoryColor, 0.19)}">
+                <header>
+                    <h4>${escapeHtml(cat.name)}</h4>
+                    <p><strong>${cat.count}</strong><span>${categoryPercent.toFixed(1)}%</span></p>
+                </header>
+                <div class="archive-quadrant-body">
+                    <div class="archive-platform-ranking">
+                        ${platforms.map(child => `
+                            <div data-treemap-tile data-category="${escapeHtml(cat.name)}" data-platform="${escapeHtml(child.platform_label)}" data-author="${escapeHtml(child.author || '多位作者')}" data-count="${child.count}" data-category-percent="${Math.round((child.count / Math.max(1, cat.count)) * 100)}" data-total-percent="${Math.round((child.count / Math.max(1, totalEntries)) * 100)}" data-recent="${encodeURIComponent(JSON.stringify(child.recent || []))}">
+                                ${renderPlatformLogo(child, 'small')}
+                                <span>${escapeHtml(child.platform_label)}</span>
+                                <em>${child.count}</em>
+                                <small>${((child.count / Math.max(1, totalEntries)) * 100).toFixed(1)}%</small>
+                            </div>
+                        `).join('') || '<p class="archive-ranking-empty">暂无平台数据</p>'}
                     </div>
-                    <div class="text-right shrink-0">
-                        <div class="font-headline ${compactHeader ? 'text-xl' : 'text-2xl'} leading-none text-white">${categoryPercent}%</div>
-                        <div class="font-label text-[10px] text-white/45">${cat.count} 条</div>
+                    <div class="archive-author-ranking">
+                        <strong>高频作者</strong>
+                        ${authors.map(author => `<p><span>${escapeHtml(author.name)}</span><em>${author.count}</em></p>`).join('') || '<p><span>暂无作者</span></p>'}
                     </div>
                 </div>
-                ${childRects.map(({ item: child, rect: childRect }) => renderTreemapTile(child, cat, childRect, totalEntries)).join('')}
             </section>
         `;
-    }).join('');
+        }).join('')}</div>`;
+    }).join('')}</div>`;
 
     container.querySelectorAll('[data-treemap-tile]').forEach(tile => {
         tile.addEventListener('mousemove', event => showTreemapTooltip(event, tooltip, tile));
         tile.addEventListener('mouseleave', () => tooltip?.classList.add('hidden'));
     });
+}
+
+function aggregateCategoryPlatforms(children) {
+    const rows = new Map();
+    children.forEach((child) => {
+        const key = child.platform || 'web';
+        const current = rows.get(key) || { ...child, count: 0, recent: [] };
+        current.count += Number(child.count) || 0;
+        current.recent = [...current.recent, ...(child.recent || [])].slice(0, 5);
+        rows.set(key, current);
+    });
+    return [...rows.values()].sort((a, b) => b.count - a.count);
+}
+
+function aggregateCategoryAuthors(children) {
+    const rows = new Map();
+    children.forEach((child) => {
+        const name = (child.author || '').trim();
+        if (!name || name === '未知作者' || name === '未命名作者') return;
+        rows.set(name, (rows.get(name) || 0) + (Number(child.count) || 0));
+    });
+    return [...rows.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
 function renderTreemapTile(child, category, rect, totalEntries) {
@@ -646,18 +704,17 @@ function renderTreemapTile(child, category, rect, totalEntries) {
             data-category-percent="${categoryPercent}"
             data-total-percent="${totalPercent}"
             data-recent="${recent}"
-            class="absolute rounded-[6px] overflow-hidden group cursor-default transition-all duration-500 hover:z-20 hover:brightness-110"
-            style="left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;background:linear-gradient(135deg, ${darkenHex(color, 0.62)} 0%, ${darkenHex(color, 0.42)} 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08);">
-            <div class="absolute inset-0 opacity-30" style="background:radial-gradient(circle at 18% 8%, rgba(255,255,255,0.45), rgba(255,255,255,0) 55%);"></div>
+            class="absolute overflow-hidden group cursor-default transition-all duration-300 hover:z-20 archive-treemap-tile"
+            style="left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;--platform-color:${color};background:${hexToRgba(color, 0.12)};box-shadow:inset 0 0 0 1px ${hexToRgba(color, 0.42)};">
             <div class="relative h-full p-2.5 flex flex-col ${tiny ? 'items-center justify-center' : 'justify-between'}">
                 <div class="flex items-center gap-2 min-w-0 ${tiny ? 'justify-center' : ''}">
                     ${renderPlatformLogo(child, small ? 'small' : 'normal')}
-                    ${tiny ? '' : `<span class="font-label text-[10px] uppercase tracking-[0.13em] text-white/72 truncate">${escapeHtml(child.platform_label || meta.label)}</span>`}
+                    ${tiny ? '' : `<span class="font-label text-[9px] uppercase text-on-surface/60 truncate">${escapeHtml(child.platform_label || meta.label)}</span>`}
                 </div>
                 ${tiny ? '' : `
                     <div class="min-w-0">
-                        <div class="font-body ${small ? 'text-[11px]' : 'text-sm'} font-semibold text-white truncate">${escapeHtml(label)}</div>
-                        <div class="font-label text-[10px] text-white/56 mt-0.5">${child.count} captures · ${categoryPercent}% of ${escapeHtml(category.name)}</div>
+                        <div class="font-headline ${small ? 'text-[11px]' : 'text-sm'} text-on-surface truncate">${escapeHtml(label)}</div>
+                        <div class="font-label text-[8px] text-on-surface/50 mt-0.5">${child.count} CAPTURES · ${categoryPercent}% OF ${escapeHtml(category.name)}</div>
                     </div>
                 `}
             </div>
@@ -1353,6 +1410,15 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCurrentView();
     });
     document.getElementById('dashboardTimeFilter')?.addEventListener('change', () => {
+        if (state.view === 'dashboard') renderDashboard();
+    });
+    document.getElementById('dashboardRangeTabs')?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-range]');
+        if (!button) return;
+        const range = button.dataset.range;
+        const select = document.getElementById('dashboardTimeFilter');
+        if (select) select.value = range;
+        document.querySelectorAll('#dashboardRangeTabs [data-range]').forEach(item => item.classList.toggle('active', item === button));
         if (state.view === 'dashboard') renderDashboard();
     });
     document.getElementById('dashboardCategoryFilter')?.addEventListener('change', () => {

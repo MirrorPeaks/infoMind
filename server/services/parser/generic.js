@@ -63,8 +63,8 @@ async function genericParse(url) {
 function detectPlatform(url) {
     const u = url.toLowerCase();
     if (u.includes('twitter.com') || u.includes('x.com')) return 'twitter';
-    if (u.includes('bilibili.com')) return 'bilibili';
-    if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+    if (u.includes('bilibili.com') || u.includes('b23.tv')) return 'bilibili';
+    if (u.includes('youtube.com') || u.includes('youtu.be') || u.includes('youtube-nocookie.com')) return 'youtube';
     if (u.includes('douyin.com') || u.includes('iesdouyin.com') || u.includes('amemv.com')) return 'douyin';
     if (u.includes('xiaohongshu.com') || u.includes('xhslink.com')) return 'xiaohongshu';
     if (u.includes('zhihu.com')) return 'zhihu';

@@ -1,14 +1,14 @@
 // public/js/bookshelf.js - Bookshelf and timeline rendering
 const PLATFORM_META = {
-    bilibili: { label: '哔哩哔哩', icon: 'smart_display' },
-    youtube: { label: 'YouTube', icon: 'play_circle' },
-    twitter: { label: 'X', icon: 'alternate_email' },
-    douyin: { label: '抖音', icon: 'music_video' },
-    xiaohongshu: { label: '小红书', icon: 'auto_awesome' },
-    zhihu: { label: '知乎', icon: 'help' },
-    xiaoyuzhou: { label: '小宇宙', icon: 'podcasts' },
-    wechat: { label: '公众号', icon: 'chat' },
-    weibo: { label: '微博', icon: 'public' },
+    bilibili: { label: '哔哩哔哩', icon: 'smart_display', logo: 'https://www.bilibili.com/favicon.ico' },
+    youtube: { label: 'YouTube', icon: 'play_circle', logo: 'https://www.youtube.com/favicon.ico' },
+    twitter: { label: 'X', icon: 'alternate_email', logo: 'https://x.com/favicon.ico' },
+    douyin: { label: '抖音', icon: 'music_video', logo: 'https://www.douyin.com/favicon.ico' },
+    xiaohongshu: { label: '小红书', icon: 'auto_awesome', logo: 'https://www.xiaohongshu.com/favicon.ico' },
+    zhihu: { label: '知乎', icon: 'help', logo: 'https://static.zhihu.com/heifetz/favicon.ico' },
+    xiaoyuzhou: { label: '小宇宙', icon: 'podcasts', logo: 'https://www.xiaoyuzhoufm.com/favicon-32x32.png' },
+    wechat: { label: '公众号', icon: 'chat', logo: 'https://mp.weixin.qq.com/favicon.ico' },
+    weibo: { label: '微博', icon: 'public', logo: 'https://weibo.com/favicon.ico' },
     web: { label: '网页', icon: 'language' },
 };
 const PLATFORM_LABELS = Object.fromEntries(Object.entries(PLATFORM_META).map(([key, meta]) => [key, meta.label]));
@@ -39,6 +39,26 @@ const CATEGORY_META = {
     工程与制造: { icon: 'engineering', tone: '#647080' },
     生态与环境: { icon: 'eco', tone: '#2f8a45' },
     其他: { icon: 'category', tone: '#727063' },
+};
+
+const CATEGORY_EN = {
+    人工智能: 'ARTIFICIAL INTELLIGENCE',
+    计算机科学: 'COMPUTER SCIENCE',
+    心理学: 'PSYCHOLOGY',
+    哲学: 'PHILOSOPHY',
+    历史: 'HISTORY',
+    自然科学: 'NATURAL SCIENCE',
+    数学: 'MATHEMATICS',
+    经济与金融: 'ECONOMICS & FINANCE',
+    商业与管理: 'BUSINESS & MANAGEMENT',
+    艺术与设计: 'ART & DESIGN',
+    影视与娱乐: 'FILM & ENTERTAINMENT',
+    文学与写作: 'LITERATURE & WRITING',
+    政治与社会: 'POLITICS & SOCIETY',
+    医学与健康: 'MEDICINE & HEALTH',
+    产品与技术: 'PRODUCT & TECHNOLOGY',
+    教育: 'EDUCATION',
+    其他: 'OPEN CATALOG',
 };
 
 function getCategoryMeta(category) {
@@ -78,8 +98,8 @@ function renderBookshelf(booksData, categoriesData, container) {
             <span class="inline-flex w-10 h-10 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-low shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]" style="color:${catMeta.tone};">
                 <span class="material-symbols-outlined text-[22px] leading-none">${escapeHtml(catMeta.icon)}</span>
             </span>
-            <span>${escapeHtml(cat.name)}</span>
-            <span class="font-label text-xs text-on-surface-variant px-2 py-1 rounded-full bg-surface-container-high">${cat.books.length} 本</span>
+            <span>${escapeHtml(cat.name)}<small class="category-english">${escapeHtml(CATEGORY_EN[cat.name] || 'KNOWLEDGE INDEX')}</small></span>
+            <span class="font-label text-xs text-on-surface-variant px-2 py-1 rounded-full bg-surface-container-high">${String(cat.books.length).padStart(2, '0')} 本</span>
         </h2>
       </div>
       <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-5 gap-y-8 shelf-row"></div>
@@ -106,6 +126,11 @@ function buildBookCard(book, index = 0) {
     const coverPath = book.cover_local || book.cover_url;
     const coverTitle = book.latest_entry_title || book.title || '无标题';
     const platColor = getPlatformColor(book.platform);
+    const archiveDate = String(book.latest_entry_created_at || book.updated_at || book.created_at || '').slice(0, 10);
+    const platformIconHtml = platformMeta.logo
+        ? `<img src="${escapeHtml(platformMeta.logo)}" alt="" class="platform-official-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" />
+           <span class="material-symbols-outlined platform-fallback-icon" style="display:none">${escapeHtml(platformMeta.icon)}</span>`
+        : `<span class="material-symbols-outlined platform-fallback-icon">${escapeHtml(platformMeta.icon)}</span>`;
 
     const coverHtml = coverPath
         ? `<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
@@ -136,9 +161,9 @@ function buildBookCard(book, index = 0) {
             <!-- Bottom gradient overlay for readability -->
             <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none z-10"></div>
             <!-- Platform badge -->
-            <span class="absolute bottom-2 right-2 z-20 px-1.5 py-0.5 rounded-sm text-[9px] font-label text-white/95 backdrop-blur-sm shadow-sm inline-flex items-center gap-0.5"
-                  style="background: ${platColor}cc;">
-                <span class="material-symbols-outlined text-[11px] leading-none">${escapeHtml(platformMeta.icon)}</span>
+            <span class="absolute bottom-2 right-2 z-20 px-1.5 py-0.5 rounded-sm text-[9px] font-label backdrop-blur-sm shadow-sm inline-flex items-center gap-1 platform-source-badge"
+                  style="--platform-color:${platColor};">
+                ${platformIconHtml}
                 <span>${escapeHtml(platformLabel)}</span>
             </span>
             <!-- Entry count badge -->
@@ -146,7 +171,7 @@ function buildBookCard(book, index = 0) {
         </div>
     </div>
     <h3 class="font-headline text-sm font-medium text-on-surface leading-snug mb-0.5 line-clamp-2">${escapeHtml(coverTitle)}</h3>
-    ${book.author ? `<p class="font-body text-xs text-on-surface-variant line-clamp-1">${escapeHtml(book.author)}</p>` : ''}
+    <p class="book-card-meta font-body text-xs text-on-surface-variant line-clamp-1">${escapeHtml(book.author || platformLabel)}${archiveDate ? ` · ${escapeHtml(archiveDate)}` : ''}</p>
   `;
 
     card.addEventListener('click', () => window.openBookModal(book.id));
@@ -189,63 +214,35 @@ function renderTimeline(entries, container) {
         `;
         rowContainer.appendChild(anchor);
 
-        // ── Entries in this month ────────────────────────────────
+        // Entries are rendered as an archival table instead of floating cards.
         groups[monthKey].forEach((entry, i) => {
             const item = document.createElement('article');
-            item.className = 'relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group';
-            const date = formatDateTimeMinute(entry.created_at);
-            const platLabel = PLATFORM_LABELS[entry.platform] || entry.platform;
-            const hasImage = !!(entry.cover_local || entry.cover_url);
-
-            const markerHTML = `
-                <div class="flex items-center justify-center w-5 h-5 rounded-full border border-surface bg-surface-container-lowest shadow-sm shadow-on-surface/5 absolute left-0 md:left-1/2 -translate-x-1/2 z-10 transition-colors group-hover:border-primary/30">
-                    <div class="w-1.5 h-1.5 bg-outline-variant rounded-full group-hover:bg-primary transition-colors"></div>
-                </div>`;
-
-            let contentHTML = '';
-
-            if (hasImage) {
-                contentHTML = `
-                <div class="timeline-entry-card w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer">
-                    <div class="bg-surface-container-lowest rounded-sm p-1 overflow-hidden transition-all duration-500 hover:bg-surface-container-low shadow-[0_4px_32px_rgba(28,28,22,0.04)]">
-                        <div class="p-6 pb-4">
-                            <time class="font-label text-xs text-on-surface-variant uppercase tracking-widest mb-3 block">${date} • ${platLabel}</time>
-                            <h3 class="font-headline text-2xl text-on-surface mb-2">${escapeHtml(entry.title || '无标题')}</h3>
-                            <p class="font-body text-on-surface-variant text-sm leading-relaxed mb-6 line-clamp-3">${escapeHtml(entry.description || '')}</p>
-                            <div class="flex gap-2">
-                                <span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant font-label text-xs rounded-full">${escapeHtml(entry.category)}</span>
-                                ${entry.author ? `<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant font-label text-xs rounded-full">${escapeHtml(entry.author)}</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="w-full aspect-[16/9] rounded-sm overflow-hidden relative">
-                            <img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="${escapeHtml(entry.cover_local || entry.cover_url)}" onerror="this.style.display='none'" />
-                        </div>
-                    </div>
-                </div>`;
-            } else {
-                contentHTML = `
-                <div class="timeline-entry-card w-[calc(100%-2rem)] md:w-[calc(50%-2.5rem)] ml-8 md:ml-0 md:group-odd:mr-auto md:group-even:ml-auto cursor-pointer">
-                    <div class="bg-surface-container-lowest rounded-sm p-8 shadow-[0_4px_32px_rgba(28,28,22,0.04)] transition-all duration-500 hover:bg-surface-container-low">
-                        <time class="font-label text-xs text-on-surface-variant uppercase tracking-widest mb-3 block">${date} • ${platLabel}</time>
-                        <h3 class="font-headline text-xl text-on-surface mb-3">${escapeHtml(entry.title || '无标题')}</h3>
-                        <p class="font-body text-on-surface-variant text-sm leading-relaxed mb-4 line-clamp-3">${escapeHtml(entry.description || '')}</p>
-                        <div class="flex gap-2">
-                            <span class="px-3 py-1 bg-secondary-container text-on-secondary-container font-label text-xs rounded-full">${escapeHtml(entry.category)}</span>
-                            ${entry.author ? `<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant font-label text-xs rounded-full">${escapeHtml(entry.author)}</span>` : ''}
-                        </div>
-                    </div>
-                </div>`;
-            }
-
-            item.innerHTML = markerHTML + contentHTML;
-            item.querySelector('.timeline-entry-card')?.addEventListener('click', () => openTimelineEntry(entry));
+            item.className = 'archive-timeline-row cursor-pointer';
+            const date = new Date(entry.created_at);
+            const time = Number.isNaN(date.getTime()) ? '--:--' : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const platformMeta = PLATFORM_META[entry.platform] || PLATFORM_META.web;
+            const platformIcon = platformMeta.logo
+                ? `<img class="timeline-platform" src="${escapeHtml(platformMeta.logo)}" alt="${escapeHtml(platformMeta.label)}" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"/><span class="material-symbols-outlined" style="display:none">${escapeHtml(platformMeta.icon)}</span>`
+                : `<span class="material-symbols-outlined">${escapeHtml(platformMeta.icon)}</span>`;
+            const code = `IM-${String(entry.id || '').slice(0, 8).toUpperCase()}`;
+            item.innerHTML = `
+                <time class="timeline-time">${escapeHtml(time)}</time>
+                <span>${platformIcon}</span>
+                <h3 class="timeline-title">${escapeHtml(entry.title || '无标题')}</h3>
+                <span class="timeline-author">${escapeHtml(entry.author || platformMeta.label)}</span>
+                <span class="timeline-category">${escapeHtml(entry.category || '其他')}</span>
+                <span class="timeline-status">已收录</span>
+                <span class="timeline-code">${escapeHtml(code)}</span>
+                <div class="archive-timeline-detail">${escapeHtml(entry.description || entry.summary || '点击打开内容详情与文章解读。')}</div>
+            `;
+            item.addEventListener('click', () => openTimelineEntry(entry));
             rowContainer.appendChild(item);
         });
     });
 
     const endMarker = document.createElement('div');
-    endMarker.className = 'flex justify-center md:justify-center justify-start ml-2 md:ml-0 relative -top-8';
-    endMarker.innerHTML = '<div class="w-2 h-2 rounded-full bg-outline-variant/30"></div>';
+    endMarker.className = 'archive-timeline-end';
+    endMarker.innerHTML = '<span>END OF CURRENT ARCHIVE</span>';
     rowContainer.appendChild(endMarker);
 }
 

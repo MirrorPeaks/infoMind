@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
+  <title id="title">InfoMind</title>
+  <desc id="desc">An open catalog frame with three index marks and a rose thought point.</desc>
+  <g fill="none" stroke="#151513" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M82 31V18H18V82H82V69" stroke-width="8"/>
+  </g>
+  <g fill="#151513">
+    <rect x="31" y="38" width="14" height="6"/>
+    <rect x="31" y="48" width="14" height="6"/>
+    <rect x="31" y="58" width="14" height="6"/>
+  </g>
+  <circle cx="80" cy="50" r="7" fill="#D06F84"/>
+</svg>

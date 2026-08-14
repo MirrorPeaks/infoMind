@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>InfoMind Clipper 配置指南</title>
+    <link href="/assets/fonts/infomind-fonts.css" rel="stylesheet" />
     <style>
         :root {
             --bg: #f5f5f7;
@@ -61,12 +62,8 @@
         .brand-mark {
             width: 32px;
             height: 32px;
-            display: grid;
-            place-items: center;
-            border-radius: 10px;
-            background: #000;
-            color: #fff;
-            font-size: 13px;
+            display: block;
+            object-fit: contain;
         }
 
         .ghost-link {
@@ -432,11 +429,12 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/css/open-catalog-pages.css?v=20260813-open-catalog">
 </head>
 <body>
     <main class="page">
         <nav class="topbar">
-            <div class="brand"><span class="brand-mark">IM</span> InfoMind Clipper</div>
+            <div class="brand"><img class="brand-mark" src="/assets/brand/infomind-mark.svg" alt="" aria-hidden="true"> InfoMind Clipper</div>
             <a class="ghost-link" href="/">返回 InfoMind</a>
         </nav>
 

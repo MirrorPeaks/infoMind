@@ -50,6 +50,9 @@
     if (platform === 'zhihu') return collectZhihu();
     if (platform === 'bilibili') return collectBilibili();
     if (platform === 'youtube') return collectYoutube();
+    if (platform === 'twitter') return collectTwitter();
+    if (platform === 'xiaoyuzhou') return collectXiaoyuzhou();
+    if (platform === 'weibo') return collectWeibo();
     return {};
   }
 
@@ -109,26 +112,82 @@
     };
   }
 
+  function collectTwitter() {
+    const tweetRoot = findTweetRoot();
+    const tweetText = queryTextWithin(tweetRoot, ['[data-testid="tweetText"]', '[lang]', 'article'], 12000);
+    const authorText = queryTextWithin(tweetRoot, ['[data-testid="User-Name"]', '[data-testid="UserName"]'], 240);
+    const author = cleanTwitterAuthor(authorText) || twitterHandleFromUrl();
+    const video = tweetRoot?.querySelector?.('video') || document.querySelector('article video, video');
+    const coverUrl = video?.poster ? absolutize(video.poster) : findImageNear(['article [data-testid="tweetPhoto"]', 'article', 'main']);
+
+    return {
+      title: tweetText ? tweetText.slice(0, 100) : document.title.replace(/\s*\/\s*X$/, ''),
+      author,
+      description: tweetText,
+      fullText: tweetText || queryTextWithin(tweetRoot, ['article', 'main'], 12000),
+      subtitleText: collectVisibleCaptions(),
+      coverUrl,
+    };
+  }
+
+  function collectXiaoyuzhou() {
+    return {
+      title: queryText(['h1', '[class*="episode-title"]', '[class*="title"]']) || document.title,
+      author: queryText(['[class*="podcast-title"]', '[class*="podcast-name"]', '[class*="author"]']),
+      description: queryText(['[class*="description"]', '[class*="shownotes"]', 'main'], 12000),
+      fullText: queryText(['[class*="description"]', '[class*="shownotes"]', 'main'], 12000),
+      coverUrl: findImageNear(['main', '[class*="episode"]', '[class*="podcast"]']) || null,
+    };
+  }
+
+  function collectWeibo() {
+    const postRoot = document.querySelector('article, [class*="Feed_detail"], [class*="detail_wbtext"]') || document.querySelector('main');
+    const postText = queryTextWithin(postRoot, [
+      '[class*="detail_wbtext"]',
+      '[node-type="feed_list_content"]',
+      '[class*="wbpro-feed-content"]',
+      'article',
+    ], 12000);
+    return {
+      title: postText ? postText.slice(0, 100) : document.title.replace(/\s*-\s*微博$/, ''),
+      author: queryTextWithin(postRoot, [
+        '[class*="head_name"]',
+        '[class*="woo-font--semibold"]',
+        'a[href*="/u/"]',
+      ], 200),
+      description: postText,
+      fullText: postText,
+      coverUrl: findImageNear(['article', '[class*="Feed_detail"]', 'main']) || null,
+    };
+  }
+
   function detectPlatform(url) {
     const value = String(url).toLowerCase();
-    if (value.includes('douyin.com') || value.includes('iesdouyin.com')) return 'douyin';
+    if (value.includes('douyin.com') || value.includes('iesdouyin.com') || value.includes('amemv.com')) return 'douyin';
     if (value.includes('xiaohongshu.com') || value.includes('xhslink.com')) return 'xiaohongshu';
     if (value.includes('zhihu.com')) return 'zhihu';
-    if (value.includes('bilibili.com')) return 'bilibili';
-    if (value.includes('youtube.com') || value.includes('youtu.be')) return 'youtube';
+    if (value.includes('bilibili.com') || value.includes('b23.tv')) return 'bilibili';
+    if (value.includes('youtube.com') || value.includes('youtu.be') || value.includes('youtube-nocookie.com')) return 'youtube';
     if (value.includes('mp.weixin.qq.com')) return 'wechat';
     if (value.includes('x.com') || value.includes('twitter.com')) return 'twitter';
+    if (value.includes('xiaoyuzhoufm.com') || value.includes('xiaoyuzhou.com')) return 'xiaoyuzhou';
+    if (value.includes('weibo.com')) return 'weibo';
     return 'web';
   }
 
   function detectContentType(platform, media, subtitleText, images, fullText) {
+    const hasVideo = media.some(item => item.type === 'video' || /\.m3u8(?:\?|$)|\.mp4(?:\?|$)/i.test(item.url || ''))
+      || !!document.querySelector('video');
     if (platform === 'youtube' || platform === 'bilibili') return 'video';
     if (platform === 'douyin') {
-      if (media.length || subtitleText || document.querySelector('video')) return 'video';
+      if (hasVideo || subtitleText) return 'video';
       if (images.length > 1 || fullText.length > 80) return 'note';
       return 'unknown';
     }
-    if (platform === 'xiaohongshu') return document.querySelector('video') ? 'video' : 'note';
+    if (platform === 'xiaohongshu') return hasVideo ? 'video' : 'note';
+    if (platform === 'twitter') return hasVideo ? 'video' : 'post';
+    if (platform === 'weibo') return hasVideo ? 'video' : 'post';
+    if (platform === 'xiaoyuzhou') return 'audio';
     return document.querySelector('article') ? 'article' : 'article';
   }
 
@@ -137,6 +196,7 @@
       url: absolutize(node.currentSrc || node.src),
       type: node.tagName.toLowerCase() === 'audio' ? 'audio' : 'video',
       duration: Number.isFinite(node.duration) ? Math.round(node.duration) : null,
+      poster: node.poster ? absolutize(node.poster) : null,
       platform,
     })).filter(item => item.url);
     return media;
@@ -148,6 +208,8 @@
       '.bpx-player-subtitle-panel-text',
       '[class*="subtitle"]',
       '[class*="caption"]',
+      '[data-testid*="caption"]',
+      '[aria-live="polite"]',
     ], 6000);
   }
 
@@ -203,6 +265,35 @@
     return '';
   }
 
+  function queryTextWithin(root, selectors, max = 300) {
+    if (!root) return queryText(selectors, max);
+    for (const selector of selectors) {
+      const node = root.matches?.(selector) ? root : root.querySelector?.(selector);
+      const text = normalizeText(node?.innerText || node?.textContent || '');
+      if (text) return text.slice(0, max);
+    }
+    return '';
+  }
+
+  function findTweetRoot() {
+    const article = document.querySelector('article[data-testid="tweet"], article');
+    if (article) return article;
+    const text = document.querySelector('[data-testid="tweetText"]');
+    return text?.closest?.('article') || document.querySelector('main') || document.body;
+  }
+
+  function cleanTwitterAuthor(value) {
+    const lines = normalizeText(value).split('\n').map(line => line.trim()).filter(Boolean);
+    const handle = lines.find(line => /^@[\w_]+$/.test(line));
+    const display = lines.find(line => line && !/^@/.test(line) && !/·|Follow|关注/.test(line));
+    return display && handle ? `${display} ${handle}` : (display || handle || '');
+  }
+
+  function twitterHandleFromUrl() {
+    const match = location.pathname.match(/^\/([^/]+)\/status\//);
+    return match ? `@${match[1]}` : '';
+  }
+
   function meta(attr, value) {
     return document.querySelector(`meta[${attr}="${value}"]`)?.content || '';
   }
@@ -254,7 +345,7 @@
     });
   }
 
-  window.InfoMindClipper = { collect: collectPage };
+  window.InfoMindClipper = { collect: collectPage, detectPlatform };
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

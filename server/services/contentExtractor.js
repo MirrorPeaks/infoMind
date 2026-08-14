@@ -3,7 +3,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const METADATA_ONLY_PLATFORMS = new Set(['bilibili', 'youtube', 'twitter', 'xiaohongshu', 'douyin']);
+const METADATA_ONLY_PLATFORMS = new Set(['bilibili', 'youtube', 'twitter', 'xiaohongshu', 'douyin', 'zhihu', 'xiaoyuzhou', 'weibo']);
 
 async function extractEntryContent(entry, { allowNetwork = true } = {}) {
     const stored = collectStoredText(entry);
@@ -26,8 +26,8 @@ async function extractEntryContent(entry, { allowNetwork = true } = {}) {
     ].filter(Boolean);
 
     const text = normalizeText(parts.join('\n\n'));
-    const sourceKind = fetched?.kind || (stored.length > 280 ? 'stored_content' : 'metadata');
-    const hasEnoughContent = estimateMeaningfulLength(text) >= 420;
+    const sourceKind = fetched?.kind || (stored.length > getStoredContentThreshold(entry) ? 'stored_content' : 'metadata');
+    const hasEnoughContent = estimateMeaningfulLength(text) >= getAnalysisThreshold(entry);
     const reason = hasEnoughContent ? null : buildInsufficientReason(entry);
 
     return {
@@ -42,6 +42,7 @@ async function extractEntryContent(entry, { allowNetwork = true } = {}) {
 
 function collectStoredText(entry) {
     const source = entry.source_data && typeof entry.source_data === 'object' ? entry.source_data : {};
+    const transcriptText = pickBestTranscript(source);
     const candidates = [
         source.full_text,
         source.fullText,
@@ -49,12 +50,9 @@ function collectStoredText(entry) {
         source.articleText,
         source.content,
         source.text,
-        source.subtitle_text,
-        source.transcript_clean,
-        source.transcript,
-        source.transcript_text,
-        source.transcriptText,
-        source.transcript_raw,
+        transcriptText,
+        source.tweet_text,
+        source.tweetText,
         source.zhihu_shared_text,
         source.douyin_shared_text,
         source.description,
@@ -62,7 +60,31 @@ function collectStoredText(entry) {
         source.seriesName,
         entry.description,
     ];
-    return normalizeText(candidates.filter(Boolean).join('\n\n'));
+    return joinUniqueText(candidates);
+}
+
+function pickBestTranscript(source) {
+    return source.transcript_clean
+        || source.subtitle_text
+        || source.transcript
+        || source.transcript_text
+        || source.transcriptText
+        || source.transcript_raw
+        || '';
+}
+
+function joinUniqueText(candidates) {
+    const blocks = [];
+    const seen = new Set();
+    for (const value of candidates) {
+        const text = normalizeText(value);
+        if (!text) continue;
+        const key = text.replace(/\s+/g, '').slice(0, 2000);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        blocks.push(text);
+    }
+    return normalizeText(blocks.join('\n\n'));
 }
 
 async function fetchReadableHtml(url) {
@@ -118,6 +140,9 @@ async function fetchReadableHtml(url) {
 }
 
 function buildInsufficientReason(entry) {
+    if (entry.platform === 'twitter') {
+        return 'X/Twitter 帖子正文不足。请在已登录浏览器里用 InfoMind Clipper 重新收录；如果帖子主要是视频，请补充字幕、转写文本或让本地转写处理。';
+    }
     if (['bilibili', 'youtube'].includes(entry.platform)) {
         return '视频内容需要字幕或转录文本。为避免浪费 token，InfoMind 不会仅凭标题和封面生成导图。';
     }
@@ -137,6 +162,16 @@ function estimateMeaningfulLength(text) {
     return normalizeText(text)
         .replace(/[^\p{Script=Han}a-z0-9]/giu, '')
         .length;
+}
+
+function getAnalysisThreshold(entry) {
+    if (entry.platform === 'twitter') return 80;
+    return 420;
+}
+
+function getStoredContentThreshold(entry) {
+    if (entry.platform === 'twitter') return 60;
+    return 280;
 }
 
 function formatLine(label, value) {

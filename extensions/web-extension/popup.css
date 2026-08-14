@@ -1,11 +1,12 @@
 :root {
   color-scheme: light;
-  --paper: #fbfaf5;
-  --ink: #1e1d1a;
-  --muted: #77736a;
-  --line: #e6e0d2;
-  --accent: #8a6f13;
-  --accent-ink: #fff8dd;
+  --paper: #f2f1ec;
+  --ink: #151513;
+  --muted: #6c6a63;
+  --line: #d8d5cc;
+  --accent: #151513;
+  --accent-ink: #ffffff;
+  --rose: #d06f84;
 }
 
 * { box-sizing: border-box; }
@@ -16,6 +17,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  border-top: 3px solid var(--ink);
 }
 
 .panel {
@@ -27,23 +29,22 @@ header {
   gap: 12px;
   align-items: center;
   margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ink);
 }
 
 .mark {
   width: 38px;
   height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #eee7d5;
-  color: var(--accent);
-  font-weight: 800;
-  letter-spacing: -0.04em;
+  display: block;
+  object-fit: contain;
 }
 
 h1 {
   margin: 0;
-  font-size: 16px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 500;
 }
 
 p {
@@ -68,7 +69,7 @@ label span {
 input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 3px;
   padding: 11px 12px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--ink);
@@ -76,14 +77,14 @@ input {
 }
 
 input:focus {
-  border-color: rgba(138, 111, 19, 0.5);
-  box-shadow: 0 0 0 3px rgba(138, 111, 19, 0.08);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px rgba(208, 111, 132, 0.22);
 }
 
 button {
   width: 100%;
   border: 0;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 12px 14px;
   margin-top: 8px;
   background: var(--accent);
@@ -91,6 +92,8 @@ button {
   font-weight: 800;
   cursor: pointer;
 }
+
+button:hover { background: #2c2b27; }
 
 button:disabled {
   cursor: progress;

@@ -31,13 +31,10 @@ fi
 
 if ! command -v yt-dlp >/dev/null 2>&1; then
   echo "Installing yt-dlp..."
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -m pip install --user --upgrade yt-dlp
-  else
-    brew install yt-dlp
-  fi
+  brew install yt-dlp
 else
-  echo "yt-dlp already installed."
+  echo "Updating yt-dlp..."
+  brew upgrade yt-dlp || true
 fi
 
 mkdir -p "$MODEL_DIR"

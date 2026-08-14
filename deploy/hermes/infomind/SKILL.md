@@ -144,7 +144,8 @@ do this:
    - blogs/articles: main article body
    - videos: captions/transcript when available; InfoMind can also trigger local whisper.cpp transcription when captions are missing
    - podcasts: transcript/show notes when available; otherwise ask before doing audio transcription
-   - 小红书/知乎/dynamic pages: browser-visible正文, OCR text if relevant and available
+   - 小红书/知乎/X/Twitter/dynamic pages: browser-visible正文, OCR text if relevant and available
+   - X/Twitter videos: visible post text first; if the video carries the main information, extract captions/transcript or write a short human/Agent transcript back
 3. Write the extracted content back to InfoMind:
 
 ```bash

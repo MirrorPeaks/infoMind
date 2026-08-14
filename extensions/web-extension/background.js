@@ -26,7 +26,7 @@ async function pollCaptureJobs() {
 
   let jobs;
   try {
-    const json = await request(settings, '/api/capture-jobs/pending?platform=douyin&limit=1');
+    const json = await request(settings, '/api/capture-jobs/pending?limit=1');
     jobs = json.data || [];
   } catch {
     return;
@@ -65,7 +65,7 @@ async function processJob(settings, job) {
       body: JSON.stringify(capture),
     });
   } catch (err) {
-    await patchJob(settings, job.id, { status: 'failed', error: err.message || '浏览器采集失败' });
+    await patchJob(settings, job.id, { status: err.jobStatus || 'failed', error: err.message || '浏览器采集失败' });
   } finally {
     if (tabId) {
       try { await chrome.tabs.remove(tabId); } catch {}
@@ -96,15 +96,40 @@ function diagnoseCapture(capture) {
     capture.full_text,
   ].filter(Boolean).join(' ');
   if (/登录|注册|验证码|安全验证|请先登录|扫码登录/.test(text) && text.length < 900) {
-    return { status: 'needs_login', error: 'Chrome 中的抖音页面需要登录或安全验证。' };
+    return { status: 'needs_login', error: `${platformLabel(capture.platform)}页面需要登录或安全验证。` };
   }
   const title = String(capture.title || '').trim();
   const author = String(capture.author || '').trim();
   const hasContent = !!(capture.description || capture.full_text || capture.subtitle_text || capture.images?.length || capture.cover_url);
-  if ((!title || ['抖音', 'Douyin'].includes(title)) && (!author || author === '抖音') && !hasContent) {
+  if ((!title || isGenericTitle(title, capture.platform)) && (!author || isGenericAuthor(author, capture.platform)) && !hasContent) {
     return { status: 'needs_user_action', error: '页面没有暴露可采集内容，请在 Chrome 手动打开该链接后重试。' };
   }
   return {};
+}
+
+function platformLabel(platform) {
+  return {
+    douyin: '抖音',
+    xiaohongshu: '小红书',
+    zhihu: '知乎',
+    twitter: 'X/Twitter',
+    weibo: '微博',
+  }[platform] || '当前';
+}
+
+function isGenericTitle(title, platform) {
+  const values = {
+    douyin: ['抖音', 'Douyin', '抖音内容'],
+    xiaohongshu: ['小红书', '小红书内容'],
+    zhihu: ['知乎', '知乎内容'],
+    twitter: ['X', 'Twitter', 'X/Twitter 帖子'],
+    weibo: ['微博', '微博正文'],
+  };
+  return (values[platform] || []).includes(title);
+}
+
+function isGenericAuthor(author, platform) {
+  return author === platformLabel(platform) || (platform === 'douyin' && author === '抖音');
 }
 
 async function patchJob(settings, jobId, body) {
@@ -124,7 +149,11 @@ async function request(settings, path, options = {}) {
     body: options.body,
   });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok || !json.success) throw new Error(json.error || `InfoMind 返回 ${response.status}`);
+  if (!response.ok || !json.success) {
+    const error = new Error(json.error || `InfoMind 返回 ${response.status}`);
+    error.jobStatus = json.job_status;
+    throw error;
+  }
   return json;
 }
 

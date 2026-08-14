@@ -6,6 +6,7 @@ const { detectPlatform } = require('../services/parser');
 const { classifyEntry } = require('../services/classifier');
 const { processBook } = require('../services/bookmaker');
 const { downloadCover } = require('../services/entryHelpers');
+const { assessParsedEntry, shouldQueueBrowserCapture } = require('../services/platformPolicy');
 
 const router = express.Router();
 const TOKEN_KEY = 'clipper.token';
@@ -44,6 +45,18 @@ router.post('/captures', requireClipperToken, async (req, res) => {
         const job = jobId ? queries.getCaptureJobById(jobId) : null;
         if (jobId && !job) return res.status(404).json({ success: false, error: 'Capture job not found' });
         if (job) queries.updateCaptureJob(job.id, { status: 'capturing', error: null });
+
+        const validationEntry = capturePayloadAsEntry(payload);
+        if (shouldQueueBrowserCapture(validationEntry, payload.url)) {
+            const assessment = assessParsedEntry(validationEntry, payload.url);
+            const status = looksLikeLoginPage(payload) ? 'needs_login' : 'needs_user_action';
+            if (job) queries.updateCaptureJob(job.id, { status, error: assessment.reason });
+            return res.status(422).json({
+                success: false,
+                error: assessment.reason,
+                job_status: status,
+            });
+        }
 
         const existing = queries.getEntryByUrl(payload.url) || (job?.url ? queries.getEntryByUrl(job.url) : null);
         if (existing) {
@@ -180,6 +193,7 @@ function buildEntryData(payload) {
             full_text: payload.full_text || null,
             subtitle_text: payload.subtitle_text || null,
             transcript: payload.subtitle_text || null,
+            tweet_text: payload.platform === 'twitter' ? (payload.full_text || payload.description || null) : null,
             images: payload.images,
             media: payload.media,
             description: payload.description || null,
@@ -187,6 +201,29 @@ function buildEntryData(payload) {
             needs_transcript: payload.content_type === 'video' && !payload.subtitle_text,
         },
     };
+}
+
+function capturePayloadAsEntry(payload) {
+    return {
+        url: payload.url,
+        platform: payload.platform,
+        title: payload.title,
+        author: payload.author,
+        description: payload.description,
+        cover_url: payload.cover_url,
+        source_data: {
+            full_text: payload.full_text,
+            subtitle_text: payload.subtitle_text,
+            description: payload.description,
+            cover_url: payload.cover_url,
+            content_source: payload.source,
+        },
+    };
+}
+
+function looksLikeLoginPage(payload) {
+    const text = [payload.title, payload.description, payload.full_text].filter(Boolean).join(' ');
+    return /请先登录|扫码登录|登录后查看|验证码|安全验证|注册后查看/i.test(text);
 }
 
 function mergeCaptureIntoEntry(entry, payload) {
@@ -200,6 +237,9 @@ function mergeCaptureIntoEntry(entry, payload) {
         full_text: payload.full_text || entry.source_data?.full_text || null,
         subtitle_text: payload.subtitle_text || entry.source_data?.subtitle_text || null,
         transcript: payload.subtitle_text || entry.source_data?.transcript || null,
+        tweet_text: payload.platform === 'twitter'
+            ? (payload.full_text || payload.description || entry.source_data?.tweet_text || null)
+            : entry.source_data?.tweet_text,
         images: payload.images?.length ? payload.images : (entry.source_data?.images || []),
         media: payload.media?.length ? payload.media : (entry.source_data?.media || []),
         description: payload.description || entry.source_data?.description || null,
@@ -218,9 +258,10 @@ function mergeCaptureIntoEntry(entry, payload) {
 
 function normalizeContentType(type, platform, media) {
     const value = String(type || '').toLowerCase();
-    if (['video', 'note', 'article', 'image', 'audio'].includes(value)) return value;
+    if (['video', 'note', 'article', 'image', 'audio', 'post'].includes(value)) return value;
     if (media.some(item => String(item.type || '').includes('video') || /\.m3u8|\.mp4/i.test(item.url))) return 'video';
     if (platform === 'youtube' || platform === 'bilibili') return 'video';
+    if (platform === 'twitter') return 'post';
     return platform === 'douyin' ? 'unknown' : 'article';
 }
 
@@ -237,6 +278,10 @@ function platformDisplayName(platform) {
         zhihu: '知乎',
         bilibili: '哔哩哔哩',
         youtube: 'YouTube',
+        twitter: 'X/Twitter',
+        xiaoyuzhou: '小宇宙',
+        wechat: '微信公众号',
+        weibo: '微博',
         web: '网页',
     };
     return names[platform] || platform || '网页';

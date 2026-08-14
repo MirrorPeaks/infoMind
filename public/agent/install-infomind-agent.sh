@@ -161,6 +161,8 @@ curl -s -X POST "__INFOMIND_BASE_URL__/api/entries/<entry_id>/transcribe" \
 ```
 
 Do not paste long transcripts into chat. Write them to InfoMind and let InfoMind run chunked analysis.
+
+For X/Twitter, write the real visible post text back as `full_text` when InfoMind says content is insufficient. If an X post contains video and the video carries the key information, extract visible captions or a concise transcript and write it as `transcript` before triggering analysis.
 SKILL
   replace_base_url "$file"
 }
